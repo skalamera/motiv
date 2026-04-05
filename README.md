@@ -42,7 +42,36 @@ AI-powered car maintenance and diagnostics: schedules, owner manuals, NHTSA reca
 
 ## Deploy (Vercel)
 
-- Link the repo to Vercel and set the same env vars (use Vercel’s AI Gateway integration for `AI_GATEWAY_API_KEY` if desired).
+Production URL: **https://motiv-azure.vercel.app**
+
+### Supabase Auth URLs (required for deployed auth)
+
+In the [Supabase Dashboard](https://supabase.com/dashboard) → your project → **Authentication** → **URL Configuration**:
+
+| Setting | Value |
+|--------|--------|
+| **Site URL** | `https://motiv-azure.vercel.app` |
+| **Additional Redirect URLs** | `https://motiv-azure.vercel.app/**` |
+
+Wildcards are supported; see [Redirect URLs](https://supabase.com/docs/guides/auth/redirect-urls). Add more rows if you use preview deployments (e.g. `https://motiv-git-*-stephens-projects-345f928b.vercel.app/**`) or a custom domain later.
+
+### Push env vars to Vercel (CLI)
+
+1. Copy [`.env.example`](.env.example) to **`.env.local`** and fill in real values (from Supabase **Project Settings → API** and Vercel **AI Gateway**).
+2. From the repo root:
+
+   ```bash
+   chmod +x scripts/sync-env-to-vercel.sh
+   ./scripts/sync-env-to-vercel.sh
+   ```
+
+   This runs `vercel env add` for **production**, **preview**, and **development** for:  
+   `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY`, `SUPABASE_SERVICE_ROLE_KEY`, `AI_GATEWAY_API_KEY`, and optional `NEWS_API_KEY` / `GOOGLE_GENERATIVE_AI_API_KEY`.
+
+3. Trigger a **Redeploy** in Vercel (Deployments → … → Redeploy) so the new variables are picked up.
+
+You can also paste the same keys in the Vercel project → **Settings → Environment Variables** UI.
+
 - From Cursor, the **Vercel MCP** `deploy_to_vercel` tool can deploy the linked project from this workspace.
 
 ## Logos
