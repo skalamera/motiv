@@ -1,36 +1,62 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# Motiv
 
-## Getting Started
+AI-powered car maintenance and diagnostics: schedules, owner manuals, NHTSA recalls, news, and a multimodal **Ask Motiv** assistant (Vercel AI SDK + Google Gemini via **AI Gateway**).
 
-First, run the development server:
+## Stack
 
-```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
-```
+- **Next.js 16** (App Router, TypeScript)
+- **Supabase** — Auth, Postgres, Storage (`manuals`, `chat-attachments`)
+- **Vercel AI SDK** — `streamText`, `useChat`, `generateObject`
+- **Tailwind CSS v4** + shadcn/ui (Base UI)
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+## Setup
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+1. **Clone & install**
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+   ```bash
+   npm install
+   ```
 
-## Learn More
+2. **Supabase**
 
-To learn more about Next.js, take a look at the following resources:
+   - Create a project at [supabase.com](https://supabase.com).
+   - Run the SQL in [`supabase/migrations/20250405120000_init.sql`](supabase/migrations/20250405120000_init.sql) (SQL editor or Supabase CLI).
+   - Enable **Email** auth (or add OAuth) under Authentication.
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+3. **Environment**
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+   Copy [`.env.example`](.env.example) to `.env.local` and fill in:
 
-## Deploy on Vercel
+   - `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY`
+   - `SUPABASE_SERVICE_ROLE_KEY` — server-only; used to load owner-manual PDFs for the AI (keep secret).
+   - `AI_GATEWAY_API_KEY` — from [Vercel AI Gateway](https://vercel.com/docs/ai-gateway) (Gemini via Gateway / BYOK).
+   - `NEWS_API_KEY` — optional; [NewsAPI.org](https://newsapi.org) for the News page.
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+4. **Dev**
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+   ```bash
+   npm run dev
+   ```
+
+   Open [http://localhost:3000](http://localhost:3000). Sign up, add a car, upload a manual PDF, then use **Ask Motiv** and **Maintenance**.
+
+## Deploy (Vercel)
+
+- Link the repo to Vercel and set the same env vars (use Vercel’s AI Gateway integration for `AI_GATEWAY_API_KEY` if desired).
+- From Cursor, the **Vercel MCP** `deploy_to_vercel` tool can deploy the linked project from this workspace.
+
+## Logos
+
+- `public/logo_full.svg` — wordmark for auth and expanded sidebar.
+- `public/logo_border_no_text.svg` — icon / favicon.
+
+## API notes
+
+- **Recalls:** `GET /api/recalls?carId=` → NHTSA `api.nhtsa.gov` (may rate-limit or block some networks).
+- **News:** `GET /api/news?make=` → NewsAPI.
+- **Chat:** `POST /api/chat` — UI message stream; optional `carId` and `queryMode` (`auto` | `maintenance` | `issue` | `visual`).
+- **Schedule generation:** `POST /api/maintenance/generate` `{ carId }` — AI fills `maintenance_schedules` (replaces non-custom rows).
+
+## License
+
+Private / your org — adjust as needed.
