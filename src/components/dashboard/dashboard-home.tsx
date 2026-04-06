@@ -9,6 +9,7 @@ import { StatCards } from "@/components/dashboard/stat-cards";
 import { QuickAsk } from "@/components/dashboard/quick-ask";
 import { RecentNews } from "@/components/dashboard/recent-news";
 import { SuggestedLocalDrive } from "@/components/dashboard/suggested-local-drive";
+import { DashboardCrew } from "@/components/dashboard/dashboard-crew";
 import { buttonVariants } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 
@@ -75,6 +76,8 @@ export function DashboardHome({ data }: { data: CarWithMeta[] }) {
           {/* ── Two-column: cars + ask motiv ── */}
           <div className="grid gap-6 lg:grid-cols-5">
             <div className="space-y-4 lg:col-span-3">
+              <DashboardCrew />
+              
               <div className="flex items-center justify-between">
                 <h2 className="text-base font-semibold tracking-tight">
                   Your vehicles

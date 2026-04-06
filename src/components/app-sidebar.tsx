@@ -17,6 +17,7 @@ import {
   LogOut,
   PanelLeftClose,
   PanelLeft,
+  Users,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
@@ -34,6 +35,7 @@ const nav = [
   { href: "/news", label: "News", icon: Newspaper },
   { href: "/videos", label: "Videos", icon: Video },
   { href: "/local-drives", label: "Local Drives", icon: MapPin },
+  { href: "/crew", label: "Crew", icon: Users },
   { href: "/settings", label: "Settings", icon: Settings },
 ];
 
@@ -53,6 +55,7 @@ export function AppSidebar({
   const pathname = usePathname();
   const router = useRouter();
   const [hasPorsche, setHasPorsche] = useState(false);
+  const [pendingInvitesCount, setPendingInvitesCount] = useState(0);
 
   useEffect(() => {
     const supabase = createClient();
@@ -64,6 +67,20 @@ export function AppSidebar({
           setHasPorsche(true);
         }
       });
+      
+    // Fetch pending friend requests and event invites
+    void supabase.auth.getUser().then(({ data: { user } }) => {
+      if (user) {
+        Promise.all([
+          supabase.from("friends").select("*", { count: "exact", head: true }).eq("friend_id", user.id).eq("status", "pending"),
+          supabase.from("event_invites").select("*", { count: "exact", head: true }).eq("invitee_id", user.id).eq("status", "pending")
+        ]).then(([friendsRes, invitesRes]) => {
+          const friendCount = friendsRes.count || 0;
+          const inviteCount = invitesRes.count || 0;
+          setPendingInvitesCount(friendCount + inviteCount);
+        });
+      }
+    });
   }, []);
 
   async function signOut() {
@@ -159,7 +176,19 @@ export function AppSidebar({
                   <span className="bg-primary absolute left-0 top-1/2 h-5 w-[3px] -translate-y-1/2 rounded-r-full" />
                 )}
                 <Icon className={cn("size-[18px] shrink-0 transition-colors", active && "text-primary")} />
-                {!collapsed ? label : null}
+                <span className="flex-1 text-left">
+                  {!collapsed ? label : null}
+                </span>
+                {!collapsed && label === "Crew" && pendingInvitesCount > 0 ? (
+                  <span className="bg-primary flex size-4 items-center justify-center rounded-full text-[9px] font-bold text-primary-foreground">
+                    {pendingInvitesCount}
+                  </span>
+                ) : null}
+                {collapsed && label === "Crew" && pendingInvitesCount > 0 ? (
+                  <span className="absolute -top-1 -right-1 flex size-3.5 items-center justify-center rounded-full bg-primary text-[8px] font-bold text-primary-foreground border-2 border-background">
+                    {pendingInvitesCount}
+                  </span>
+                ) : null}
               </Link>
             );
           })}

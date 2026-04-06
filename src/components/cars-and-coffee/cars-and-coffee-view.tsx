@@ -32,16 +32,11 @@ export function CarsAndCoffeeView({
   stateSlug: string; 
   currentUser: Profile;
 }) {
-  const [friendsOpen, setFriendsOpen] = useState(false);
   const [createEventOpen, setCreateEventOpen] = useState(false);
 
   // Friend Network State
-  const [searchEmail, setSearchEmail] = useState("");
-  const [searching, setSearching] = useState(false);
-  const [searchResults, setSearchResults] = useState<SearchedUser[]>([]);
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const [friendsList, setFriendsList] = useState<(Friend & { friend_profile: Profile, user_profile: Profile })[]>([]);
-  const [friendLoading, setFriendLoading] = useState(false);
 
   // Event State
   const [events, setEvents] = useState<EventRow[]>([]);
@@ -59,7 +54,6 @@ export function CarsAndCoffeeView({
   const [creatingEvt, setCreatingEvt] = useState(false);
 
   async function loadFriends() {
-    setFriendLoading(true);
     // Fetch friends where I am user_id or friend_id
     const { data: myRequests } = await supabase
       .from("friends")
@@ -68,7 +62,6 @@ export function CarsAndCoffeeView({
     
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     setFriendsList((myRequests || []) as any);
-    setFriendLoading(false);
   }
 
   async function loadEvents() {
@@ -108,38 +101,6 @@ export function CarsAndCoffeeView({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  async function searchFriends(e: React.FormEvent) {
-    e.preventDefault();
-    if (!searchEmail.trim()) return;
-    setSearching(true);
-    const { data } = await supabase.rpc("search_users_by_email", { search_email: searchEmail.trim() });
-    setSearchResults((data || []) as SearchedUser[]);
-    setSearching(false);
-  }
-
-  async function sendFriendRequest(friendId: string) {
-    await supabase.from("friends").insert({
-      user_id: currentUser.id,
-      friend_id: friendId,
-      status: "pending"
-    });
-    setSearchEmail("");
-    setSearchResults([]);
-    loadFriends();
-  }
-
-  async function acceptFriendRequest(id: string) {
-    await supabase.from("friends").update({ status: "accepted" }).eq("id", id);
-    loadFriends();
-  }
-
-  async function declineOrRemoveFriend(id: string) {
-    await supabase.from("friends").delete().eq("id", id);
-    loadFriends();
-  }
-
-  // Pending requests where I am the friend_id
-  const pendingRequests = friendsList.filter(f => f.friend_id === currentUser.id && f.status === "pending");
   // Accepted friends (I can be user_id or friend_id)
   const acceptedFriends = friendsList.filter(f => f.status === "accepted");
 
@@ -155,7 +116,7 @@ export function CarsAndCoffeeView({
     // Combine date and time
     const startDateTime = new Date(`${evtDate}T${evtTime}`);
 
-    const { data: newEvt, error: evtErr } = await supabase.from("events").insert({
+    const { data: newEvt } = await supabase.from("events").insert({
       creator_id: currentUser.id,
       title: evtTitle,
       start_time: startDateTime.toISOString(),
@@ -195,15 +156,6 @@ export function CarsAndCoffeeView({
           <p className="text-muted-foreground text-sm mt-1">Discover local events and connect with enthusiasts.</p>
         </div>
         <div className="flex gap-2">
-          <Button variant="secondary" onClick={() => setFriendsOpen(true)} className="relative">
-            <Users className="mr-2 size-4" />
-            Network
-            {pendingRequests.length > 0 && (
-              <span className="absolute -top-1 -right-1 flex size-4 items-center justify-center rounded-full bg-primary text-[9px] font-bold text-primary-foreground">
-                {pendingRequests.length}
-              </span>
-            )}
-          </Button>
           <Button onClick={() => setCreateEventOpen(true)}>
             <Plus className="mr-2 size-4" />
             Create Event
@@ -296,124 +248,6 @@ export function CarsAndCoffeeView({
       </div>
 
       {/* Friends Network Dialog */}
-      <Dialog open={friendsOpen} onOpenChange={setFriendsOpen}>
-        <DialogContent className="sm:max-w-md h-[80vh] flex flex-col">
-          <DialogHeader>
-            <DialogTitle>Friend Network</DialogTitle>
-          </DialogHeader>
-          <div className="flex-1 overflow-y-auto space-y-6 pr-2">
-            
-            {/* Search */}
-            <div className="space-y-3">
-              <h3 className="text-sm font-semibold">Find Friends</h3>
-              <form onSubmit={searchFriends} className="flex gap-2">
-                <div className="relative flex-1">
-                  <Search className="absolute left-2.5 top-2.5 size-4 text-muted-foreground" />
-                  <Input 
-                    type="email" 
-                    placeholder="Search by exact email..." 
-                    className="pl-9"
-                    value={searchEmail}
-                    onChange={(e) => setSearchEmail(e.target.value)}
-                  />
-                </div>
-                <Button type="submit" disabled={!searchEmail.trim() || searching}>
-                  {searching ? <Loader2 className="size-4 animate-spin" /> : "Search"}
-                </Button>
-              </form>
-              
-              {searchResults.length > 0 && (
-                <div className="rounded-md border border-border/50 bg-muted/30 p-2 space-y-2">
-                  {searchResults.map(u => {
-                    const isFriend = friendsList.some(f => 
-                      (f.user_id === currentUser.id && f.friend_id === u.id) || 
-                      (f.friend_id === currentUser.id && f.user_id === u.id)
-                    );
-                    const isSelf = u.id === currentUser.id;
-
-                    return (
-                      <div key={u.id} className="flex items-center justify-between p-2 rounded-md bg-background/50">
-                        <div className="flex items-center gap-3">
-                          <div className="size-8 rounded-full bg-primary/10 text-primary flex items-center justify-center font-bold uppercase">
-                            {u.display_name?.charAt(0) || u.id.charAt(0)}
-                          </div>
-                          <span className="text-sm font-medium">{u.display_name || "Unknown User"}</span>
-                        </div>
-                        {!isSelf && !isFriend && (
-                          <Button size="sm" variant="ghost" onClick={() => sendFriendRequest(u.id)}>
-                            <UserPlus className="size-4 mr-1.5" /> Add
-                          </Button>
-                        )}
-                        {isFriend && <Badge variant="secondary" className="text-[10px]">Added</Badge>}
-                        {isSelf && <Badge variant="outline" className="text-[10px]">You</Badge>}
-                      </div>
-                    )
-                  })}
-                </div>
-              )}
-            </div>
-
-            {/* Pending Requests */}
-            {pendingRequests.length > 0 && (
-              <div className="space-y-3">
-                <h3 className="text-sm font-semibold flex items-center gap-2">
-                  Friend Requests <Badge variant="secondary" className="bg-primary/20 text-primary">{pendingRequests.length}</Badge>
-                </h3>
-                <div className="space-y-2">
-                  {pendingRequests.map(req => (
-                    <div key={req.id} className="flex items-center justify-between p-3 rounded-lg border border-border/50 bg-card">
-                      <div className="flex items-center gap-3">
-                        <div className="size-8 rounded-full bg-accent flex items-center justify-center font-bold uppercase">
-                          {req.user_profile?.display_name?.charAt(0) || '?'}
-                        </div>
-                        <span className="text-sm font-medium">{req.user_profile?.display_name || "Unknown"}</span>
-                      </div>
-                      <div className="flex gap-1.5">
-                        <Button size="icon" variant="default" className="size-7 rounded-full" onClick={() => acceptFriendRequest(req.id)}>
-                          <Check className="size-4" />
-                        </Button>
-                        <Button size="icon" variant="outline" className="size-7 rounded-full text-destructive hover:text-destructive" onClick={() => declineOrRemoveFriend(req.id)}>
-                          <X className="size-4" />
-                        </Button>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            )}
-
-            {/* My Friends */}
-            <div className="space-y-3">
-              <h3 className="text-sm font-semibold">My Friends ({acceptedFriends.length})</h3>
-              {acceptedFriends.length === 0 ? (
-                <p className="text-xs text-muted-foreground">Search for a friend's email above to start building your network.</p>
-              ) : (
-                <div className="space-y-2">
-                  {acceptedFriends.map(f => {
-                    const profile = getFriendProfile(f);
-                    return (
-                      <div key={f.id} className="flex items-center justify-between p-2 rounded-lg hover:bg-muted/30 transition-colors">
-                        <div className="flex items-center gap-3">
-                          <div className="size-8 rounded-full bg-accent flex items-center justify-center font-bold uppercase">
-                            {profile?.display_name?.charAt(0) || '?'}
-                          </div>
-                          <span className="text-sm font-medium">{profile?.display_name || "Unknown"}</span>
-                        </div>
-                        <Button size="icon" variant="ghost" className="size-7 text-muted-foreground hover:text-destructive" onClick={() => declineOrRemoveFriend(f.id)}>
-                          <X className="size-3.5" />
-                        </Button>
-                      </div>
-                    );
-                  })}
-                </div>
-              )}
-            </div>
-
-          </div>
-        </DialogContent>
-      </Dialog>
-
-      {/* Create Event Dialog */}
       <Dialog open={createEventOpen} onOpenChange={setCreateEventOpen}>
         <DialogContent className="sm:max-w-md max-h-[90vh] overflow-y-auto">
           <DialogHeader>
