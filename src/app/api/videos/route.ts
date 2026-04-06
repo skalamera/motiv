@@ -213,6 +213,41 @@ export async function GET(req: Request) {
   const failures: KeywordFailure[] = [];
   const groups: KeywordVideos[] = [];
   const pcaGroups: KeywordVideos[] = [];
+  const cncGroups: KeywordVideos[] = [];
+
+  // Add Cars & Coffee channel videos
+  const cncKeyword = "Cars and Coffee Events";
+  const currentCnC = nextCursor[cncKeyword];
+  if (!currentCnC?.done) {
+    try {
+      const { videos, nextPageToken } = await searchVideosPage(
+        "",
+        apiKey,
+        currentCnC?.pageToken,
+        "UC-4ohmKaY3HL-S8GTJoAnrA", // Cars and Coffee Events Channel ID
+        "date" // sort by most recent
+      );
+      if (videos.length > 0) {
+        cncGroups.push({ keyword: cncKeyword, videos });
+      }
+      nextCursor[cncKeyword] = {
+        query: "",
+        pageToken: nextPageToken,
+        done: !nextPageToken,
+      };
+    } catch (e) {
+      const err = e instanceof Error ? e.message : "Unknown YouTube API error";
+      console.error(`YouTube lookup failed for Cars and Coffee:`, err);
+      failures.push({
+        keyword: cncKeyword,
+        error: err,
+      });
+      nextCursor[cncKeyword] = {
+        query: "",
+        done: true,
+      };
+    }
+  }
 
   // Add PCA channel videos if they have a Porsche
   if (hasPorsche) {
@@ -283,12 +318,14 @@ export async function GET(req: Request) {
   }
 
   const hasMorePca = hasPorsche ? !nextCursor["Porsche Club of America"]?.done : false;
-  const hasMore = keywords.some((k) => !nextCursor[k]?.done) || hasMorePca;
+  const hasMoreCnC = !nextCursor["Cars and Coffee Events"]?.done;
+  const hasMore = keywords.some((k) => !nextCursor[k]?.done) || hasMorePca || hasMoreCnC;
 
   return Response.json({
     configured: true,
     groups,
     pcaGroups,
+    cncGroups,
     failures,
     cursor: JSON.stringify(nextCursor),
     hasMore,

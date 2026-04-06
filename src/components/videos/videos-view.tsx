@@ -37,6 +37,7 @@ export function VideosView() {
   const [videosLoading, setVideosLoading] = useState(false);
   const [groups, setGroups] = useState<KeywordVideos[]>([]);
   const [pcaGroups, setPcaGroups] = useState<KeywordVideos[]>([]);
+  const [cncGroups, setCncGroups] = useState<KeywordVideos[]>([]);
   const [notConfigured, setNotConfigured] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [failures, setFailures] = useState<KeywordFailure[]>([]);
@@ -99,6 +100,7 @@ export function VideosView() {
         configured?: boolean;
         groups?: KeywordVideos[];
         pcaGroups?: KeywordVideos[];
+        cncGroups?: KeywordVideos[];
         failures?: KeywordFailure[];
         cursor?: string;
         hasMore?: boolean;
@@ -109,6 +111,7 @@ export function VideosView() {
         if (!append) {
           setGroups([]);
           setPcaGroups([]);
+          setCncGroups([]);
         }
         setFailures([]);
         if (!append) {
@@ -121,6 +124,7 @@ export function VideosView() {
         setNotConfigured(true);
         setGroups([]);
         setPcaGroups([]);
+        setCncGroups([]);
         setFailures([]);
         setCursor(null);
         setHasMore(false);
@@ -133,6 +137,9 @@ export function VideosView() {
       setPcaGroups((prev) =>
         append ? mergeGroups(prev, body.pcaGroups ?? []) : body.pcaGroups ?? [],
       );
+      setCncGroups((prev) =>
+        append ? mergeGroups(prev, body.cncGroups ?? []) : body.cncGroups ?? [],
+      );
       setFailures(body.failures ?? []);
       setCursor(body.cursor ?? null);
       setHasMore(Boolean(body.hasMore));
@@ -141,6 +148,7 @@ export function VideosView() {
       if (!append) {
         setGroups([]);
         setPcaGroups([]);
+        setCncGroups([]);
       }
       setFailures([]);
     } finally {
@@ -203,7 +211,7 @@ export function VideosView() {
     );
   }
 
-  if (videosLoading && groups.length === 0 && pcaGroups.length === 0) {
+  if (videosLoading && groups.length === 0 && pcaGroups.length === 0 && cncGroups.length === 0) {
     return (
       <div className="text-muted-foreground flex items-center gap-2 text-sm">
         <Loader2 className="size-4 animate-spin" />
@@ -228,7 +236,7 @@ export function VideosView() {
     );
   }
 
-  if (groups.length === 0 && pcaGroups.length === 0) {
+  if (groups.length === 0 && pcaGroups.length === 0 && cncGroups.length === 0) {
     return (
       <div className="space-y-2 text-sm">
         {failures.length > 0 ? (
@@ -267,8 +275,47 @@ export function VideosView() {
   }
 
   return (
-    <div className="space-y-8">
-      <div className="flex items-center justify-end">
+    <div className="space-y-8 relative">
+      <div className="sticky top-0 z-10 -mx-4 px-4 py-3 bg-background/80 backdrop-blur-md border-b border-border/50 flex flex-wrap items-center justify-between gap-3">
+        <div className="flex flex-wrap gap-2">
+          {cncGroups.length > 0 && (
+            <Button
+              variant="secondary"
+              size="sm"
+              className="rounded-full text-xs"
+              onClick={() => {
+                document.getElementById('cnc-section')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+              }}
+            >
+              Cars and Coffee
+            </Button>
+          )}
+          {pcaGroups.length > 0 && (
+            <Button
+              variant="secondary"
+              size="sm"
+              className="rounded-full text-xs"
+              onClick={() => {
+                document.getElementById('pca-section')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+              }}
+            >
+              Porsche Club of America
+            </Button>
+          )}
+          {groups.length > 0 && (
+            <Button
+              variant="secondary"
+              size="sm"
+              className="rounded-full text-xs"
+              onClick={() => {
+                document.getElementById('foryou-section')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+              }}
+            >
+              Videos for you
+            </Button>
+          )}
+        </div>
+
         <Button
           type="button"
           variant="outline"
@@ -286,8 +333,69 @@ export function VideosView() {
         </Button>
       </div>
 
+      {cncGroups.length > 0 && (
+        <div id="cnc-section" className="space-y-4 pt-4 scroll-mt-20">
+          <div className="flex items-center gap-3">
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img
+              src="/carscoffee.svg"
+              alt="Cars and Coffee"
+              className="size-8 object-contain dark:invert"
+            />
+            <h2 className="text-xl font-semibold tracking-tight">Cars and Coffee Events</h2>
+          </div>
+          {cncGroups.map((group) => (
+            <Card
+              key={group.keyword}
+              className="glass-card border-border overflow-hidden bg-card/40"
+            >
+              <CardHeader className="pb-2">
+                <CardTitle className="text-lg">Recent Videos</CardTitle>
+                <p className="text-muted-foreground text-xs">
+                  From the official Cars and Coffee Events YouTube channel
+                </p>
+              </CardHeader>
+              <CardContent className="pt-0">
+                <div className="grid gap-3 sm:grid-cols-2">
+                  {group.videos.map((v) => (
+                    <button
+                      type="button"
+                      key={v.id}
+                      onClick={() => setActiveVideoId(v.id)}
+                      className="group border-border/50 bg-card/60 hover:border-primary/30 hover:bg-accent/50 block overflow-hidden rounded-xl border transition-all text-left w-full"
+                    >
+                      <div className="relative aspect-video w-full overflow-hidden bg-black/30">
+                        {/* eslint-disable-next-line @next/next/no-img-element */}
+                        <img
+                          src={v.thumbnail}
+                          alt={v.title}
+                          className="h-full w-full object-cover transition-transform group-hover:scale-[1.02] opacity-80 group-hover:opacity-100"
+                        />
+                        <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+                          <div className="bg-black/50 p-3 rounded-full text-white backdrop-blur-sm transition-transform group-hover:scale-110">
+                            <PlayCircle className="size-8" />
+                          </div>
+                        </div>
+                      </div>
+                      <div className="space-y-1 p-3">
+                        <p className="line-clamp-2 text-sm font-medium leading-snug">
+                          {v.title}
+                        </p>
+                        <p className="text-muted-foreground flex items-center gap-1 text-xs">
+                          {v.channelTitle}
+                        </p>
+                      </div>
+                    </button>
+                  ))}
+                </div>
+              </CardContent>
+            </Card>
+          ))}
+        </div>
+      )}
+
       {pcaGroups.length > 0 && (
-        <div className="space-y-4 mb-8">
+        <div id="pca-section" className="space-y-4 pt-4 scroll-mt-20">
           <div className="flex items-center gap-3">
             {/* eslint-disable-next-line @next/next/no-img-element */}
             <img
@@ -348,7 +456,7 @@ export function VideosView() {
       )}
 
       {groups.length > 0 && (
-        <div className="space-y-4">
+        <div id="foryou-section" className="space-y-4 pt-4 scroll-mt-20">
           <h2 className="text-xl font-semibold tracking-tight">Videos for you</h2>
           {groups.map((group) => (
             <Card
