@@ -169,7 +169,7 @@ export function AppSidebar({
               title={collapsed ? "PCA" : undefined}
               onClick={() => onNavigate?.()}
               className={cn(
-                "group relative flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium transition-all duration-200",
+                "group relative flex items-center gap-2.5 rounded-xl px-2.5 py-2.5 text-sm font-medium transition-all duration-200",
                 pathname === "/pca" || pathname.startsWith("/pca/")
                   ? "bg-primary/10 text-primary shadow-sm"
                   : "text-muted-foreground hover:bg-accent hover:text-foreground",
@@ -184,9 +184,9 @@ export function AppSidebar({
                 src="/pca.svg"
                 alt="PCA"
                 className={cn(
-                  "size-[18px] shrink-0 transition-colors opacity-70 group-hover:opacity-100",
+                  "size-[22px] shrink-0 transition-colors opacity-70 group-hover:opacity-100",
                   (pathname === "/pca" || pathname.startsWith("/pca/")) && "opacity-100 invert-[.4] sepia-[1] saturate-[5] hue-rotate-[190deg]",
-                  collapsed && "size-5"
+                  collapsed && "size-6"
                 )}
               />
               {!collapsed ? "PCA" : null}
