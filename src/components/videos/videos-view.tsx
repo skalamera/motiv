@@ -36,6 +36,7 @@ export function VideosView() {
   const [garageLoading, setGarageLoading] = useState(true);
   const [videosLoading, setVideosLoading] = useState(false);
   const [groups, setGroups] = useState<KeywordVideos[]>([]);
+  const [pcaGroups, setPcaGroups] = useState<KeywordVideos[]>([]);
   const [notConfigured, setNotConfigured] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [failures, setFailures] = useState<KeywordFailure[]>([]);
@@ -97,6 +98,7 @@ export function VideosView() {
       const body = (await res.json()) as {
         configured?: boolean;
         groups?: KeywordVideos[];
+        pcaGroups?: KeywordVideos[];
         failures?: KeywordFailure[];
         cursor?: string;
         hasMore?: boolean;
@@ -104,7 +106,10 @@ export function VideosView() {
       };
       if (!res.ok) {
         setError(body.error || "Could not load videos");
-        if (!append) setGroups([]);
+        if (!append) {
+          setGroups([]);
+          setPcaGroups([]);
+        }
         setFailures([]);
         if (!append) {
           setCursor(null);
@@ -115,6 +120,7 @@ export function VideosView() {
       if (body.configured === false) {
         setNotConfigured(true);
         setGroups([]);
+        setPcaGroups([]);
         setFailures([]);
         setCursor(null);
         setHasMore(false);
@@ -124,12 +130,18 @@ export function VideosView() {
       setGroups((prev) =>
         append ? mergeGroups(prev, body.groups ?? []) : body.groups ?? [],
       );
+      setPcaGroups((prev) =>
+        append ? mergeGroups(prev, body.pcaGroups ?? []) : body.pcaGroups ?? [],
+      );
       setFailures(body.failures ?? []);
       setCursor(body.cursor ?? null);
       setHasMore(Boolean(body.hasMore));
     } catch (e) {
       setError(e instanceof Error ? e.message : "Could not load videos");
-      if (!append) setGroups([]);
+      if (!append) {
+        setGroups([]);
+        setPcaGroups([]);
+      }
       setFailures([]);
     } finally {
       setVideosLoading(false);
@@ -191,7 +203,7 @@ export function VideosView() {
     );
   }
 
-  if (videosLoading && groups.length === 0) {
+  if (videosLoading && groups.length === 0 && pcaGroups.length === 0) {
     return (
       <div className="text-muted-foreground flex items-center gap-2 text-sm">
         <Loader2 className="size-4 animate-spin" />
@@ -216,7 +228,7 @@ export function VideosView() {
     );
   }
 
-  if (groups.length === 0) {
+  if (groups.length === 0 && pcaGroups.length === 0) {
     return (
       <div className="space-y-2 text-sm">
         {failures.length > 0 ? (
@@ -274,53 +286,119 @@ export function VideosView() {
         </Button>
       </div>
 
-      {groups.map((group) => (
-        <Card
-          key={group.keyword}
-          className="glass-card border-border overflow-hidden bg-card/40"
-        >
-          <CardHeader className="pb-2">
-            <CardTitle className="text-lg">{group.keyword}</CardTitle>
-            <p className="text-muted-foreground text-xs">
-              Random YouTube results based on your car&apos;s make + model keyword
-            </p>
-          </CardHeader>
-          <CardContent className="pt-0">
-            <div className="grid gap-3 sm:grid-cols-2">
-              {group.videos.map((v) => (
-                <button
-                  type="button"
-                  key={v.id}
-                  onClick={() => setActiveVideoId(v.id)}
-                  className="group border-border/50 bg-card/60 hover:border-primary/30 hover:bg-accent/50 block overflow-hidden rounded-xl border transition-all text-left w-full"
-                >
-                  <div className="relative aspect-video w-full overflow-hidden bg-black/30">
-                    {/* eslint-disable-next-line @next/next/no-img-element */}
-                    <img
-                      src={v.thumbnail}
-                      alt={v.title}
-                      className="h-full w-full object-cover transition-transform group-hover:scale-[1.02] opacity-80 group-hover:opacity-100"
-                    />
-                    <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
-                      <div className="bg-black/50 p-3 rounded-full text-white backdrop-blur-sm transition-transform group-hover:scale-110">
-                        <PlayCircle className="size-8" />
+      {pcaGroups.length > 0 && (
+        <div className="space-y-4 mb-8">
+          <div className="flex items-center gap-3">
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img
+              src="/pca.svg"
+              alt="PCA"
+              className="size-8 object-contain dark:invert"
+            />
+            <h2 className="text-xl font-semibold tracking-tight">Porsche Club of America</h2>
+          </div>
+          {pcaGroups.map((group) => (
+            <Card
+              key={group.keyword}
+              className="glass-card border-border overflow-hidden bg-card/40"
+            >
+              <CardHeader className="pb-2">
+                <CardTitle className="text-lg">Recent Videos</CardTitle>
+                <p className="text-muted-foreground text-xs">
+                  From the official Porsche Club of America YouTube channel
+                </p>
+              </CardHeader>
+              <CardContent className="pt-0">
+                <div className="grid gap-3 sm:grid-cols-2">
+                  {group.videos.map((v) => (
+                    <button
+                      type="button"
+                      key={v.id}
+                      onClick={() => setActiveVideoId(v.id)}
+                      className="group border-border/50 bg-card/60 hover:border-primary/30 hover:bg-accent/50 block overflow-hidden rounded-xl border transition-all text-left w-full"
+                    >
+                      <div className="relative aspect-video w-full overflow-hidden bg-black/30">
+                        {/* eslint-disable-next-line @next/next/no-img-element */}
+                        <img
+                          src={v.thumbnail}
+                          alt={v.title}
+                          className="h-full w-full object-cover transition-transform group-hover:scale-[1.02] opacity-80 group-hover:opacity-100"
+                        />
+                        <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+                          <div className="bg-black/50 p-3 rounded-full text-white backdrop-blur-sm transition-transform group-hover:scale-110">
+                            <PlayCircle className="size-8" />
+                          </div>
+                        </div>
                       </div>
-                    </div>
-                  </div>
-                  <div className="space-y-1 p-3">
-                    <p className="line-clamp-2 text-sm font-medium leading-snug">
-                      {v.title}
-                    </p>
-                    <p className="text-muted-foreground flex items-center gap-1 text-xs">
-                      {v.channelTitle}
-                    </p>
-                  </div>
-                </button>
-              ))}
-            </div>
-          </CardContent>
-        </Card>
-      ))}
+                      <div className="space-y-1 p-3">
+                        <p className="line-clamp-2 text-sm font-medium leading-snug">
+                          {v.title}
+                        </p>
+                        <p className="text-muted-foreground flex items-center gap-1 text-xs">
+                          {v.channelTitle}
+                        </p>
+                      </div>
+                    </button>
+                  ))}
+                </div>
+              </CardContent>
+            </Card>
+          ))}
+        </div>
+      )}
+
+      {groups.length > 0 && (
+        <div className="space-y-4">
+          <h2 className="text-xl font-semibold tracking-tight">Videos for you</h2>
+          {groups.map((group) => (
+            <Card
+              key={group.keyword}
+              className="glass-card border-border overflow-hidden bg-card/40"
+            >
+              <CardHeader className="pb-2">
+                <CardTitle className="text-lg">{group.keyword}</CardTitle>
+                <p className="text-muted-foreground text-xs">
+                  Random YouTube results based on your car&apos;s make + model keyword
+                </p>
+              </CardHeader>
+              <CardContent className="pt-0">
+                <div className="grid gap-3 sm:grid-cols-2">
+                  {group.videos.map((v) => (
+                    <button
+                      type="button"
+                      key={v.id}
+                      onClick={() => setActiveVideoId(v.id)}
+                      className="group border-border/50 bg-card/60 hover:border-primary/30 hover:bg-accent/50 block overflow-hidden rounded-xl border transition-all text-left w-full"
+                    >
+                      <div className="relative aspect-video w-full overflow-hidden bg-black/30">
+                        {/* eslint-disable-next-line @next/next/no-img-element */}
+                        <img
+                          src={v.thumbnail}
+                          alt={v.title}
+                          className="h-full w-full object-cover transition-transform group-hover:scale-[1.02] opacity-80 group-hover:opacity-100"
+                        />
+                        <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+                          <div className="bg-black/50 p-3 rounded-full text-white backdrop-blur-sm transition-transform group-hover:scale-110">
+                            <PlayCircle className="size-8" />
+                          </div>
+                        </div>
+                      </div>
+                      <div className="space-y-1 p-3">
+                        <p className="line-clamp-2 text-sm font-medium leading-snug">
+                          {v.title}
+                        </p>
+                        <p className="text-muted-foreground flex items-center gap-1 text-xs">
+                          {v.channelTitle}
+                        </p>
+                      </div>
+                    </button>
+                  ))}
+                </div>
+              </CardContent>
+            </Card>
+          ))}
+        </div>
+      )}
 
       <Dialog open={!!activeVideoId} onOpenChange={(open) => !open && setActiveVideoId(null)}>
         <DialogContent className="sm:max-w-[800px] p-0 overflow-hidden bg-black border-border/50">

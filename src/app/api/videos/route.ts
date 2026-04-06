@@ -107,15 +107,18 @@ async function searchVideosPage(
   query: string,
   apiKey: string,
   pageToken?: string,
+  channelId?: string,
+  order: "relevance" | "date" = "relevance"
 ): Promise<{ videos: VideoResult[]; nextPageToken?: string }> {
   const url = new URL("https://www.googleapis.com/youtube/v3/search");
   url.searchParams.set("part", "snippet");
   url.searchParams.set("type", "video");
   url.searchParams.set("videoEmbeddable", "true");
   url.searchParams.set("maxResults", String(YOUTUBE_BATCH_SIZE));
-  url.searchParams.set("order", "relevance");
+  url.searchParams.set("order", order);
   url.searchParams.set("safeSearch", "moderate");
-  url.searchParams.set("q", query);
+  if (query) url.searchParams.set("q", query);
+  if (channelId) url.searchParams.set("channelId", channelId);
   url.searchParams.set("key", apiKey);
   if (pageToken) url.searchParams.set("pageToken", pageToken);
 
@@ -136,22 +139,22 @@ async function searchVideosPage(
   };
   const items = json.items ?? [];
 
-  const videos = shuffle(
-    items
-      .map((it) => {
-        const videoId = it.id?.videoId?.trim();
-        if (!videoId) return null;
-        return {
-          id: videoId,
-          title: it.snippet?.title?.trim() ?? "Untitled",
-          channelTitle: it.snippet?.channelTitle?.trim() ?? "YouTube",
-          publishedAt: it.snippet?.publishedAt ?? "",
-          thumbnail: pickThumbnail(it),
-          url: `https://www.youtube.com/watch?v=${videoId}`,
-        };
-      })
-      .filter((v): v is VideoResult => Boolean(v)),
-  ).slice(0, VIDEOS_PER_KEYWORD);
+  const mapped = items
+    .map((it) => {
+      const videoId = it.id?.videoId?.trim();
+      if (!videoId) return null;
+      return {
+        id: videoId,
+        title: it.snippet?.title?.trim() ?? "Untitled",
+        channelTitle: it.snippet?.channelTitle?.trim() ?? "YouTube",
+        publishedAt: it.snippet?.publishedAt ?? "",
+        thumbnail: pickThumbnail(it),
+        url: `https://www.youtube.com/watch?v=${videoId}`,
+      };
+    })
+    .filter((v): v is VideoResult => Boolean(v));
+    
+  const videos = order === "date" ? mapped.slice(0, VIDEOS_PER_KEYWORD) : shuffle(mapped).slice(0, VIDEOS_PER_KEYWORD);
 
   return { videos, nextPageToken: json.nextPageToken };
 }
@@ -193,6 +196,8 @@ export async function GET(req: Request) {
       .filter(Boolean),
   )].slice(0, MAX_KEYWORDS);
 
+  const hasPorsche = (cars ?? []).some(c => c.make?.toLowerCase() === "porsche");
+
   if (keywords.length === 0) {
     return Response.json({
       configured: true,
@@ -207,6 +212,43 @@ export async function GET(req: Request) {
 
   const failures: KeywordFailure[] = [];
   const groups: KeywordVideos[] = [];
+  const pcaGroups: KeywordVideos[] = [];
+
+  // Add PCA channel videos if they have a Porsche
+  if (hasPorsche) {
+    const pcaKeyword = "Porsche Club of America";
+    const current = nextCursor[pcaKeyword];
+    if (!current?.done) {
+      try {
+        const { videos, nextPageToken } = await searchVideosPage(
+          "",
+          apiKey,
+          current?.pageToken,
+          "UCdBSaHWRHMQTVALwa7gs7Fg", // PCA Channel ID
+          "date" // sort by most recent
+        );
+        if (videos.length > 0) {
+          pcaGroups.push({ keyword: pcaKeyword, videos });
+        }
+        nextCursor[pcaKeyword] = {
+          query: "",
+          pageToken: nextPageToken,
+          done: !nextPageToken,
+        };
+      } catch (e) {
+        const err = e instanceof Error ? e.message : "Unknown YouTube API error";
+        console.error(`YouTube lookup failed for PCA:`, err);
+        failures.push({
+          keyword: pcaKeyword,
+          error: err,
+        });
+        nextCursor[pcaKeyword] = {
+          query: "",
+          done: true,
+        };
+      }
+    }
+  }
 
   for (const keyword of keywords) {
     const current = nextCursor[keyword];
@@ -240,11 +282,13 @@ export async function GET(req: Request) {
     }
   }
 
-  const hasMore = keywords.some((k) => !nextCursor[k]?.done);
+  const hasMorePca = hasPorsche ? !nextCursor["Porsche Club of America"]?.done : false;
+  const hasMore = keywords.some((k) => !nextCursor[k]?.done) || hasMorePca;
 
   return Response.json({
     configured: true,
     groups,
+    pcaGroups,
     failures,
     cursor: JSON.stringify(nextCursor),
     hasMore,
