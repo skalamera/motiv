@@ -740,7 +740,13 @@ export function MaintenanceTracker({ initialCarId }: { initialCarId: string | nu
       <div className="flex justify-between items-center mb-4">
         <Select value={tab} onValueChange={(val) => val && setTab(val)}>
           <SelectTrigger className="w-[280px]">
-            <SelectValue placeholder="Select a car" />
+            <SelectValue placeholder="Select a car">
+              {(() => {
+                const c = cars.find((car) => car.id === tab);
+                if (!c) return "Select a car";
+                return `${c.year} ${c.make} ${c.model}`;
+              })()}
+            </SelectValue>
           </SelectTrigger>
           <SelectContent>
             {cars.map((c) => (

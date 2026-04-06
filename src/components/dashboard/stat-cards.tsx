@@ -157,7 +157,13 @@ export function StatCards({ data }: { data: CarWithMeta[] }) {
               <Label>Vehicle</Label>
               <Select value={selectedCarId} onValueChange={handleCarChange}>
                 <SelectTrigger>
-                  <SelectValue placeholder="Select a car" />
+                  <SelectValue placeholder="Select a car">
+                    {(() => {
+                      const c = data.find((d) => d.car.id === selectedCarId)?.car;
+                      if (!c) return "Select a car";
+                      return `${c.year} ${c.make} ${c.model}`;
+                    })()}
+                  </SelectValue>
                 </SelectTrigger>
                 <SelectContent>
                   {data.map((d) => (
