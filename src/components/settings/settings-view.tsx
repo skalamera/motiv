@@ -22,6 +22,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Separator } from "@/components/ui/separator";
+import { Textarea } from "@/components/ui/textarea";
 import { Loader2, Pencil, Plus, Trash2, Upload } from "lucide-react";
 
 export function SettingsView() {
@@ -29,6 +30,7 @@ export function SettingsView() {
   const [manuals, setManuals] = useState<Record<string, Manual[]>>({});
   const [loading, setLoading] = useState(true);
   const [displayName, setDisplayName] = useState("");
+  const [locationAddress, setLocationAddress] = useState("");
   const [savingProfile, setSavingProfile] = useState(false);
 
   const [addOpen, setAddOpen] = useState(false);
@@ -55,9 +57,12 @@ export function SettingsView() {
       .eq("id", user.id)
       .maybeSingle();
     if (prof) {
-      setDisplayName(
-        (prof as { display_name?: string | null }).display_name ?? "",
-      );
+      const p = prof as {
+        display_name?: string | null;
+        location_address?: string | null;
+      };
+      setDisplayName(p.display_name ?? "");
+      setLocationAddress(p.location_address ?? "");
     }
 
     const { data: carRows } = await supabase
@@ -92,10 +97,13 @@ export function SettingsView() {
     } = await supabase.auth.getUser();
     if (!user) return;
     setSavingProfile(true);
-    await supabase.from("profiles").upsert({
-      id: user.id,
-      display_name: displayName || null,
-    });
+    await supabase
+      .from("profiles")
+      .update({
+        display_name: displayName.trim() || null,
+        location_address: locationAddress.trim() || null,
+      })
+      .eq("id", user.id);
     setSavingProfile(false);
     await load();
   }
@@ -208,12 +216,12 @@ export function SettingsView() {
     <div className="mx-auto max-w-2xl space-y-8">
       <div>
         <h1 className="text-2xl font-bold tracking-tight">Settings</h1>
-        <p className="text-muted-foreground text-sm">
+        <p className="text-muted-foreground mt-1 text-sm">
           Profile, vehicles, and owner&apos;s manual PDFs for AI context.
         </p>
       </div>
 
-      <Card className="glass-card border-white/10 bg-card/40">
+      <Card className="border border-border/50 bg-card/50 backdrop-blur-sm">
         <CardHeader>
           <CardTitle>Profile</CardTitle>
           <CardDescription>Shown across Motiv.</CardDescription>
@@ -225,6 +233,19 @@ export function SettingsView() {
               value={displayName}
               onChange={(e) => setDisplayName(e.target.value)}
               className="bg-background/50 max-w-md"
+            />
+          </div>
+          <div>
+            <Label htmlFor="location-address">Location</Label>
+            <p className="text-muted-foreground mb-1.5 text-xs">
+              Your home address or neighborhood. Used for Local Drives suggestions.
+            </p>
+            <Textarea
+              id="location-address"
+              value={locationAddress}
+              onChange={(e) => setLocationAddress(e.target.value)}
+              placeholder="e.g. 123 Main St, Asheville, NC 28801"
+              className="bg-background/50 min-h-[88px] max-w-md resize-y"
             />
           </div>
           <Button onClick={() => void saveProfile()} disabled={savingProfile}>
@@ -312,7 +333,7 @@ export function SettingsView() {
           <p className="text-muted-foreground text-sm">No cars yet.</p>
         ) : null}
         {cars.map((c) => (
-          <Card key={c.id} className="glass-card border-white/10 bg-card/40">
+          <Card key={c.id} className="border border-border/50 bg-card/50 backdrop-blur-sm">
             <CardHeader className="flex flex-row items-start justify-between gap-2">
               <div>
                 <CardTitle className="text-base">

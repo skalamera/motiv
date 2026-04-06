@@ -83,7 +83,7 @@ You can also paste the same keys in the Vercel project → **Settings → Enviro
 
 - **Recalls:** `GET /api/recalls?carId=` → NHTSA `api.nhtsa.gov` (may rate-limit or block some networks).
 - **News:** `GET /api/news?make=` → NewsAPI.
-- **Chat:** `POST /api/chat` — UI message stream; optional `carId` and `queryMode` (`auto` | `maintenance` | `issue` | `visual`).
+- **Chat:** `POST /api/chat` — UI message stream; optional `carId`, optional `manualId` (manuals page). Owner manual (when available) plus Google Search; multimodal user attachments supported.
 - **Schedule generation:** `POST /api/maintenance/generate` `{ carId }` — AI fills `maintenance_schedules` (replaces non-custom rows).
 
 ## License

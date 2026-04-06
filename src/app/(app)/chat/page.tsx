@@ -7,7 +7,8 @@ import { ChatInterface } from "@/components/chat/chat-interface";
 function ChatInner() {
   const sp = useSearchParams();
   const car = sp.get("car");
-  return <ChatInterface initialCarId={car} />;
+  const initialQuery = sp.get("q");
+  return <ChatInterface initialCarId={car} initialQuery={initialQuery} />;
 }
 
 export default function ChatPage() {

@@ -1,5 +1,5 @@
 import { createClient } from "@/lib/supabase/server";
-import { fetchRecallsByVehicle } from "@/lib/nhtsa";
+import { fetchRecallsForCar } from "@/lib/nhtsa";
 
 export async function GET(req: Request) {
   const supabase = await createClient();
@@ -17,7 +17,7 @@ export async function GET(req: Request) {
 
   const { data: car, error } = await supabase
     .from("cars")
-    .select("id, make, model, year, user_id")
+    .select("id, make, model, trim, year, vin, user_id")
     .eq("id", carId)
     .eq("user_id", user.id)
     .maybeSingle();
@@ -27,12 +27,18 @@ export async function GET(req: Request) {
   }
 
   try {
-    const recalls = await fetchRecallsByVehicle(
-      car.make,
-      car.model,
-      car.year,
-    );
-    return Response.json({ recalls, car });
+    const modelQuery = [car.model, car.trim]
+      .map((s) => s?.trim())
+      .filter(Boolean)
+      .join(" ");
+    const { recalls, lookup } = await fetchRecallsForCar({
+      vin: car.vin,
+      make: car.make,
+      model: modelQuery || car.model,
+      profileModelBase: car.model,
+      modelYear: car.year,
+    });
+    return Response.json({ recalls, car, lookup });
   } catch (e) {
     console.error(e);
     return Response.json(

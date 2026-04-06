@@ -19,6 +19,11 @@ type Props = {
   className?: string;
 };
 
+export function carDisplayName(c: Car): string {
+  const t = [c.year, c.make, c.model, c.trim].filter(Boolean).join(" ");
+  return t || "Vehicle";
+}
+
 export function CarSelector({
   value,
   onChange,
@@ -65,18 +70,29 @@ export function CarSelector({
         <Label className="text-muted-foreground mb-2 block text-xs">{label}</Label>
       ) : null}
       <Select
-        value={value ?? "__none__"}
-        onValueChange={(v) => onChange(v === "__none__" ? null : v)}
+        modal={false}
+        value={value ?? ""}
+        onValueChange={(v) => onChange(v === "" ? null : v)}
       >
-        <SelectTrigger className="bg-background/50 w-full max-w-xs">
-          <SelectValue placeholder="Select vehicle" />
+        <SelectTrigger className="bg-background/50 h-auto min-h-9 w-full min-w-[min(100%,22rem)] max-w-xl sm:min-w-[26rem]">
+          <SelectValue placeholder="Any / not specified">
+            {(v) => {
+              if (v == null || v === "") return "Any / not specified";
+              const c = cars.find((car) => car.id === v);
+              return c ? carDisplayName(c) : "Any / not specified";
+            }}
+          </SelectValue>
         </SelectTrigger>
-        <SelectContent>
-          <SelectItem value="__none__">Any / not specified</SelectItem>
+        <SelectContent className="max-w-[min(100vw-1.5rem,40rem)]">
+          <SelectItem value="">Any / not specified</SelectItem>
           {cars.map((c) => (
-            <SelectItem key={c.id} value={c.id}>
-              {c.year} {c.make} {c.model}
-              {c.trim ? ` ${c.trim}` : ""}
+            <SelectItem
+              key={c.id}
+              value={c.id}
+              label={carDisplayName(c)}
+              className="items-start py-2.5"
+            >
+              <span className="whitespace-normal">{carDisplayName(c)}</span>
             </SelectItem>
           ))}
         </SelectContent>

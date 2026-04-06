@@ -55,7 +55,7 @@ export function CarCard({
       animate={{ opacity: 1, y: 0 }}
       transition={{ delay: index * 0.06 }}
     >
-      <Card className="glass-card border-white/10 bg-card/50 overflow-hidden backdrop-blur-md transition-shadow hover:shadow-lg">
+      <Card className="gradient-border group overflow-hidden border border-border/50 bg-card/50 backdrop-blur-sm transition-all duration-300 hover:shadow-xl hover:shadow-primary/5">
         <CardHeader className="flex flex-row items-start justify-between gap-2 pb-2">
           <div>
             <CardTitle className="text-lg font-semibold tracking-tight">
@@ -67,19 +67,19 @@ export function CarCard({
                 </span>
               ) : null}
             </CardTitle>
-            <div className="text-muted-foreground mt-1 flex flex-wrap items-center gap-2 text-xs">
-              <span className="inline-flex items-center gap-1">
+            <div className="text-muted-foreground mt-1.5 flex flex-wrap items-center gap-2 text-xs">
+              <span className="inline-flex items-center gap-1 rounded-full bg-muted/60 px-2 py-0.5">
                 <Gauge className="size-3.5" />
                 {car.mileage.toLocaleString()} mi
               </span>
               {recallCount > 0 ? (
-                <Badge variant="destructive" className="gap-1 text-[10px]">
+                <Badge variant="destructive" className="gap-1 rounded-full text-[10px]">
                   <AlertTriangle className="size-3" />
                   {recallCount} recall{recallCount === 1 ? "" : "s"}
                 </Badge>
               ) : (
-                <Badge variant="secondary" className="text-[10px]">
-                  No open recalls (NHTSA)
+                <Badge variant="secondary" className="rounded-full text-[10px]">
+                  No open recalls
                 </Badge>
               )}
             </div>
@@ -89,14 +89,14 @@ export function CarCard({
             aria-label="Maintenance"
             className={cn(
               buttonVariants({ variant: "ghost", size: "icon" }),
-              "inline-flex",
+              "inline-flex rounded-xl text-muted-foreground transition-colors group-hover:text-primary",
             )}
           >
             <ChevronRight className="size-4" />
           </Link>
         </CardHeader>
         <CardContent className="space-y-3">
-          <div className="bg-muted/40 flex items-start gap-2 rounded-lg border border-white/5 p-3 text-sm">
+          <div className="flex items-start gap-2 rounded-xl border border-border/50 bg-accent/50 p-3 text-sm">
             <CalendarClock className="text-primary mt-0.5 size-4 shrink-0" />
             <div>
               <p className="text-muted-foreground text-xs font-medium tracking-wide uppercase">
@@ -109,8 +109,8 @@ export function CarCard({
             <Link
               href={`/chat?car=${car.id}`}
               className={cn(
-                buttonVariants({ size: "sm", variant: "secondary" }),
-                "inline-flex",
+                buttonVariants({ size: "sm" }),
+                "ai-gradient inline-flex rounded-xl border-0 text-white shadow-sm hover:opacity-90",
               )}
             >
               Ask Motiv
@@ -119,7 +119,7 @@ export function CarCard({
               href={`/recalls?car=${car.id}`}
               className={cn(
                 buttonVariants({ size: "sm", variant: "outline" }),
-                "inline-flex",
+                "inline-flex rounded-xl",
               )}
             >
               Recalls

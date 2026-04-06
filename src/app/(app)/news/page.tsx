@@ -6,9 +6,7 @@ export default function NewsPage() {
       <div>
         <h1 className="text-2xl font-bold tracking-tight">News</h1>
         <p className="text-muted-foreground text-sm">
-          Headlines for your manufacturers via NewsAPI. Set{" "}
-          <code className="bg-muted rounded px-1 py-0.5 text-xs">NEWS_API_KEY</code>{" "}
-          in production.
+          Headlines relevant to you
         </p>
       </div>
       <NewsFeed />

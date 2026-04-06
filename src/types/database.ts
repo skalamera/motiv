@@ -2,6 +2,7 @@ export type Profile = {
   id: string;
   display_name: string | null;
   avatar_url: string | null;
+  location_address: string | null;
   created_at: string;
 };
 
@@ -49,4 +50,6 @@ export type MaintenanceLog = {
   mileage_at: number | null;
   notes: string | null;
   cost: number | null;
+  /** Set for manual history rows (no schedule); schedule-linked rows usually use the join for task name. */
+  title: string | null;
 };

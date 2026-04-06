@@ -12,7 +12,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   const [collapsed, setCollapsed] = useState(false);
   const [mobileNav, setMobileNav] = useState(false);
   return (
-    <div className="bg-background flex min-h-screen">
+    <div className="motiv-mesh-bg bg-background flex min-h-screen">
       <div className="hidden md:flex">
         <AppSidebar
           collapsed={collapsed}
@@ -21,7 +21,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
       </div>
 
       <div className="flex min-h-screen min-w-0 flex-1 flex-col">
-        <header className="border-border flex h-14 items-center gap-2 border-b px-4 md:hidden">
+        <header className="flex h-14 items-center gap-2 border-b border-border/50 px-4 backdrop-blur-xl md:hidden">
           <Sheet open={mobileNav} onOpenChange={setMobileNav}>
             <Button
               variant="ghost"
@@ -40,13 +40,13 @@ export function AppShell({ children }: { children: React.ReactNode }) {
               />
             </SheetContent>
           </Sheet>
-          <span className="font-semibold tracking-tight">Motiv</span>
+          <span className="bg-gradient-to-r from-primary to-primary/70 bg-clip-text font-semibold tracking-tight text-transparent">motiv</span>
           <div className="ml-auto flex items-center gap-1">
             <ThemeToggle />
           </div>
         </header>
 
-        <header className="border-border hidden h-12 items-center justify-end border-b px-4 md:flex">
+        <header className="hidden h-12 items-center justify-end border-b border-border/50 px-4 backdrop-blur-xl md:flex">
           <ThemeToggle />
         </header>
 
@@ -63,7 +63,7 @@ function ThemeToggle() {
     <Button
       variant="ghost"
       size="icon"
-      className="relative"
+      className="relative rounded-xl text-muted-foreground hover:text-foreground"
       aria-label="Toggle theme"
       title="Toggle theme"
       onClick={() =>
@@ -72,13 +72,13 @@ function ThemeToggle() {
     >
       <Sun
         className={cn(
-          "size-[18px] transition-all",
+          "size-[18px] transition-all duration-300",
           resolvedTheme === "dark" ? "scale-0 rotate-90" : "scale-100 rotate-0",
         )}
       />
       <Moon
         className={cn(
-          "absolute size-[18px] transition-all",
+          "absolute size-[18px] transition-all duration-300",
           resolvedTheme === "dark" ? "scale-100 rotate-0" : "scale-0 -rotate-90",
         )}
       />

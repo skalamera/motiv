@@ -26,6 +26,42 @@ import {
 import { Loader2, Plus, Sparkles, Trash2 } from "lucide-react";
 import { ScrollArea } from "@/components/ui/scroll-area";
 
+type ServiceLogRow = {
+  id: string;
+  completed_at: string;
+  mileage_at: number | null;
+  notes: string | null;
+  cost: number | null;
+  taskLabel: string;
+};
+
+function formatShortDate(iso: string | null): string {
+  if (!iso) return "—";
+  try {
+    return new Date(iso).toLocaleDateString(undefined, {
+      month: "short",
+      day: "numeric",
+      year: "numeric",
+    });
+  } catch {
+    return "—";
+  }
+}
+
+function localDateToNoonIso(dateYmd: string): string {
+  const [y, m, d] = dateYmd.split("-").map(Number);
+  if (!y || !m || !d) return new Date().toISOString();
+  return new Date(y, m - 1, d, 12, 0, 0, 0).toISOString();
+}
+
+function todayYmd(): string {
+  const t = new Date();
+  const y = t.getFullYear();
+  const m = String(t.getMonth() + 1).padStart(2, "0");
+  const d = String(t.getDate()).padStart(2, "0");
+  return `${y}-${m}-${d}`;
+}
+
 function ScheduleRow({
   row,
   car,
@@ -51,6 +87,7 @@ function ScheduleRow({
     const { error: logErr } = await supabase.from("maintenance_logs").insert({
       schedule_id: row.id,
       car_id: car.id,
+      title: row.task,
       mileage_at: mi,
       notes: notes || null,
       cost: costNum,
@@ -90,6 +127,9 @@ function ScheduleRow({
       </TableCell>
       <TableCell className="text-muted-foreground max-w-[180px] truncate text-xs">
         {row.notes ?? "—"}
+      </TableCell>
+      <TableCell className="text-muted-foreground whitespace-nowrap text-xs">
+        {formatShortDate(row.last_completed_at)}
       </TableCell>
       <TableCell className="text-right">
         <div className="flex justify-end gap-1">
@@ -162,6 +202,7 @@ export function MaintenanceTracker({ initialCarId }: { initialCarId: string | nu
   const [schedules, setSchedules] = useState<Record<string, MaintenanceSchedule[]>>(
     {},
   );
+  const [logsByCar, setLogsByCar] = useState<Record<string, ServiceLogRow[]>>({});
   const [tab, setTab] = useState<string>("");
   const [loading, setLoading] = useState(true);
   const [generating, setGenerating] = useState(false);
@@ -169,6 +210,56 @@ export function MaintenanceTracker({ initialCarId }: { initialCarId: string | nu
   const [newTask, setNewTask] = useState("");
   const [newMiles, setNewMiles] = useState("");
   const [newMonths, setNewMonths] = useState("");
+
+  const [manualLogOpen, setManualLogOpen] = useState(false);
+  const [manualCarId, setManualCarId] = useState<string | null>(null);
+  const [manualTitle, setManualTitle] = useState("");
+  const [manualDate, setManualDate] = useState(todayYmd);
+  const [manualMileage, setManualMileage] = useState("");
+  const [manualCost, setManualCost] = useState("");
+  const [manualNotes, setManualNotes] = useState("");
+  const [manualSaving, setManualSaving] = useState(false);
+
+  const openManualLog = useCallback(
+    (car: Car) => {
+      setManualCarId(car.id);
+      setManualTitle("");
+      setManualDate(todayYmd());
+      setManualMileage(String(car.mileage));
+      setManualCost("");
+      setManualNotes("");
+      setManualLogOpen(true);
+    },
+    [],
+  );
+
+  async function saveManualLog() {
+    if (!manualCarId || !manualTitle.trim()) return;
+    setManualSaving(true);
+    const supabase = createClient();
+    const miParsed = manualMileage.trim()
+      ? parseInt(manualMileage, 10)
+      : NaN;
+    const costParsed = manualCost.trim()
+      ? parseFloat(manualCost)
+      : NaN;
+    const { error } = await supabase.from("maintenance_logs").insert({
+      schedule_id: null,
+      car_id: manualCarId,
+      title: manualTitle.trim(),
+      completed_at: localDateToNoonIso(manualDate),
+      mileage_at: Number.isFinite(miParsed) ? miParsed : null,
+      notes: manualNotes.trim() || null,
+      cost: Number.isFinite(costParsed) ? costParsed : null,
+    });
+    setManualSaving(false);
+    if (error) {
+      alert(error.message);
+      return;
+    }
+    setManualLogOpen(false);
+    await load();
+  }
 
   const load = useCallback(async () => {
     const supabase = createClient();
@@ -179,6 +270,7 @@ export function MaintenanceTracker({ initialCarId }: { initialCarId: string | nu
     const list = (carRows ?? []) as Car[];
     setCars(list);
     const map: Record<string, MaintenanceSchedule[]> = {};
+    const logsMap: Record<string, ServiceLogRow[]> = {};
     for (const car of list) {
       const { data: sch } = await supabase
         .from("maintenance_schedules")
@@ -186,8 +278,50 @@ export function MaintenanceTracker({ initialCarId }: { initialCarId: string | nu
         .eq("car_id", car.id)
         .order("task");
       map[car.id] = (sch ?? []) as MaintenanceSchedule[];
+
+      const { data: logRows } = await supabase
+        .from("maintenance_logs")
+        .select(
+          `
+          id,
+          completed_at,
+          mileage_at,
+          notes,
+          cost,
+          title,
+          maintenance_schedules ( task )
+        `,
+        )
+        .eq("car_id", car.id)
+        .order("completed_at", { ascending: false })
+        .limit(100);
+
+      type LogJoin = {
+        id: string;
+        completed_at: string;
+        mileage_at: number | null;
+        notes: string | null;
+        cost: number | null;
+        title: string | null;
+        maintenance_schedules: { task: string } | null;
+      };
+
+      logsMap[car.id] = (logRows ?? []).map((raw) => {
+        const row = raw as unknown as LogJoin;
+        const fromSchedule = row.maintenance_schedules?.task?.trim();
+        const fromTitle = row.title?.trim();
+        return {
+          id: row.id,
+          completed_at: row.completed_at,
+          mileage_at: row.mileage_at,
+          notes: row.notes,
+          cost: row.cost,
+          taskLabel: fromSchedule || fromTitle || "Service",
+        };
+      });
     }
     setSchedules(map);
+    setLogsByCar(logsMap);
     setLoading(false);
   }, []);
 
@@ -274,6 +408,7 @@ export function MaintenanceTracker({ initialCarId }: { initialCarId: string | nu
 
   const active = cars.find((c) => c.id === tab) ?? cars[0];
   const rows = schedules[active.id] ?? [];
+  const historyRows = logsByCar[active.id] ?? [];
 
   return (
     <div className="space-y-4">
@@ -284,7 +419,7 @@ export function MaintenanceTracker({ initialCarId }: { initialCarId: string | nu
               <TabsTrigger
                 key={c.id}
                 value={c.id}
-                className="data-[state=active]:bg-primary data-[state=active]:text-primary-foreground rounded-full border px-3 py-1 text-xs"
+                className="data-[state=active]:bg-primary/10 data-[state=active]:text-primary data-[state=active]:border-primary/30 rounded-full border border-border/50 px-3 py-1 text-xs transition-all"
               >
                 {c.year} {c.make} {c.model}
               </TabsTrigger>
@@ -298,7 +433,7 @@ export function MaintenanceTracker({ initialCarId }: { initialCarId: string | nu
               <Button
                 onClick={() => void runGenerate()}
                 disabled={generating || tab !== c.id}
-                variant="default"
+                className="ai-gradient glow-primary rounded-xl border-0 text-white shadow-md hover:opacity-90 disabled:opacity-50"
               >
                 {generating ? (
                   <Loader2 className="mr-2 size-4 animate-spin" />
@@ -355,7 +490,7 @@ export function MaintenanceTracker({ initialCarId }: { initialCarId: string | nu
               </Dialog>
             </div>
 
-            <div className="glass-card rounded-xl border">
+            <div className="rounded-xl border border-border/50 bg-card/50 backdrop-blur-sm">
               <Table>
                 <TableHeader>
                   <TableRow>
@@ -363,6 +498,7 @@ export function MaintenanceTracker({ initialCarId }: { initialCarId: string | nu
                     <TableHead>Interval</TableHead>
                     <TableHead>Source</TableHead>
                     <TableHead>Notes</TableHead>
+                    <TableHead>Last done</TableHead>
                     <TableHead className="text-right">Actions</TableHead>
                   </TableRow>
                 </TableHeader>
@@ -370,7 +506,7 @@ export function MaintenanceTracker({ initialCarId }: { initialCarId: string | nu
                   {rows.length === 0 ? (
                     <TableRow>
                       <TableCell
-                        colSpan={5}
+                        colSpan={6}
                         className="text-muted-foreground text-center text-sm"
                       >
                         No rows yet. Run auto-populate or add your own.
@@ -391,13 +527,161 @@ export function MaintenanceTracker({ initialCarId }: { initialCarId: string | nu
               </Table>
             </div>
 
+            <div className="rounded-xl border border-border/50 bg-card/50 backdrop-blur-sm">
+              <div className="border-border/50 flex flex-col gap-3 border-b px-4 py-3 sm:flex-row sm:items-start sm:justify-between">
+                <div>
+                  <h3 className="text-sm font-semibold tracking-tight">
+                    Service history
+                  </h3>
+                  <p className="text-muted-foreground mt-0.5 max-w-xl text-xs">
+                    <strong className="text-foreground font-medium">Log done</strong> on a
+                    task above, or{" "}
+                    <strong className="text-foreground font-medium">add a manual entry</strong>{" "}
+                    for work that isn&apos;t on your schedule. Separate from what&apos;s due
+                    next.
+                  </p>
+                </div>
+                <Button
+                  type="button"
+                  variant="secondary"
+                  size="sm"
+                  className="shrink-0"
+                  onClick={() => openManualLog(c)}
+                >
+                  <Plus className="mr-1.5 size-3.5" />
+                  Add manual log
+                </Button>
+              </div>
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Date</TableHead>
+                    <TableHead>Task</TableHead>
+                    <TableHead>Odometer</TableHead>
+                    <TableHead>Cost</TableHead>
+                    <TableHead className="max-w-[200px]">Notes</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {historyRows.length === 0 ? (
+                    <TableRow>
+                      <TableCell
+                        colSpan={5}
+                        className="text-muted-foreground py-8 text-center text-sm"
+                      >
+                        No services logged yet. Use{" "}
+                        <span className="text-foreground font-medium">Log done</span> or{" "}
+                        <span className="text-foreground font-medium">Add manual log</span>.
+                      </TableCell>
+                    </TableRow>
+                  ) : (
+                    historyRows.map((log) => (
+                      <TableRow key={log.id}>
+                        <TableCell className="whitespace-nowrap text-sm">
+                          {formatShortDate(log.completed_at)}
+                        </TableCell>
+                        <TableCell className="font-medium">{log.taskLabel}</TableCell>
+                        <TableCell className="text-muted-foreground text-sm">
+                          {log.mileage_at != null
+                            ? `${log.mileage_at.toLocaleString()} mi`
+                            : "—"}
+                        </TableCell>
+                        <TableCell className="text-muted-foreground text-sm">
+                          {log.cost != null
+                            ? `$${Number(log.cost).toFixed(2)}`
+                            : "—"}
+                        </TableCell>
+                        <TableCell className="text-muted-foreground max-w-[200px] truncate text-xs">
+                          {log.notes ?? "—"}
+                        </TableCell>
+                      </TableRow>
+                    ))
+                  )}
+                </TableBody>
+              </Table>
+            </div>
+
             <div className="text-muted-foreground text-xs">
-              Timeline: completed services update &quot;last done&quot; on each
-              row. Refine intervals anytime with custom rows.
+              Logging from the schedule updates the{" "}
+              <strong className="text-foreground font-medium">Last done</strong> column for
+              that task. Manual entries only appear in history. Refine intervals anytime
+              with custom rows.
             </div>
           </TabsContent>
         ))}
       </Tabs>
+
+      <Dialog open={manualLogOpen} onOpenChange={setManualLogOpen}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Add manual service log</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-3 py-1">
+            <div>
+              <Label>Service / task name</Label>
+              <Input
+                value={manualTitle}
+                onChange={(e) => setManualTitle(e.target.value)}
+                placeholder="e.g. Tire patch at Discount Tire"
+                autoFocus
+              />
+            </div>
+            <div>
+              <Label>Date</Label>
+              <Input
+                type="date"
+                value={manualDate}
+                onChange={(e) => setManualDate(e.target.value)}
+              />
+            </div>
+            <div>
+              <Label>Odometer (mi)</Label>
+              <Input
+                type="number"
+                value={manualMileage}
+                onChange={(e) => setManualMileage(e.target.value)}
+              />
+            </div>
+            <div>
+              <Label>Cost (optional)</Label>
+              <Input
+                type="number"
+                step="0.01"
+                value={manualCost}
+                onChange={(e) => setManualCost(e.target.value)}
+              />
+            </div>
+            <div>
+              <Label>Notes (optional)</Label>
+              <Input
+                value={manualNotes}
+                onChange={(e) => setManualNotes(e.target.value)}
+                placeholder="Parts, shop name, warranty…"
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => setManualLogOpen(false)}
+            >
+              Cancel
+            </Button>
+            <Button
+              type="button"
+              onClick={() => void saveManualLog()}
+              disabled={manualSaving || !manualTitle.trim()}
+            >
+              {manualSaving ? (
+                <Loader2 className="size-4 animate-spin" />
+              ) : (
+                "Save log"
+              )}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

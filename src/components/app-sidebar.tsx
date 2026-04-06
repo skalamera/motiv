@@ -6,8 +6,12 @@ import {
   LayoutDashboard,
   MessageSquare,
   Wrench,
+  Gauge,
   AlertTriangle,
   Newspaper,
+  Video,
+  MapPin,
+  BookOpen,
   Settings,
   LogOut,
   PanelLeftClose,
@@ -23,8 +27,12 @@ const nav = [
   { href: "/", label: "Dashboard", icon: LayoutDashboard },
   { href: "/chat", label: "Ask Motiv", icon: MessageSquare },
   { href: "/maintenance", label: "Maintenance", icon: Wrench },
+  { href: "/upgrades", label: "Upgrades", icon: Gauge },
+  { href: "/manuals", label: "User manuals", icon: BookOpen },
   { href: "/recalls", label: "Recalls", icon: AlertTriangle },
   { href: "/news", label: "News", icon: Newspaper },
+  { href: "/videos", label: "Videos", icon: Video },
+  { href: "/local-drives", label: "Local Drives", icon: MapPin },
   { href: "/settings", label: "Settings", icon: Settings },
 ];
 
@@ -54,11 +62,11 @@ export function AppSidebar({
   return (
     <aside
       className={cn(
-        "border-sidebar-border bg-sidebar/80 flex h-full flex-col border-r backdrop-blur-xl transition-[width] duration-200",
+        "bg-sidebar flex h-full flex-col border-r border-sidebar-border/50 transition-[width] duration-250 ease-out",
         collapsed ? "w-[72px]" : "w-60",
       )}
     >
-      <div className="flex h-14 items-center gap-2 border-b border-white/5 px-3">
+      <div className="flex h-14 items-center gap-2 px-3">
         {collapsed ? (
           <Link href="/" className="flex flex-1 justify-center">
             {/* eslint-disable-next-line @next/next/no-img-element */}
@@ -67,18 +75,34 @@ export function AppSidebar({
               alt="Motiv"
               width={40}
               height={40}
-              className="h-9 w-9 rounded-lg"
+              className="h-9 w-9 shrink-0 object-contain dark:hidden"
+            />
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img
+              src="/motiv_dark_notext.svg"
+              alt="Motiv"
+              width={40}
+              height={40}
+              className="hidden h-9 w-9 shrink-0 object-contain dark:block"
             />
           </Link>
         ) : (
           <Link href="/" className="flex flex-1 items-center justify-center py-2">
             {/* eslint-disable-next-line @next/next/no-img-element */}
             <img
-              src="/logo_full.svg"
+              src="/logo_border_no_text.svg"
               alt="Motiv"
-              width={160}
-              height={56}
-              className="h-10 w-auto max-w-[140px]"
+              width={40}
+              height={40}
+              className="h-10 w-10 shrink-0 object-contain dark:hidden"
+            />
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img
+              src="/motiv_dark_notext.svg"
+              alt="Motiv"
+              width={40}
+              height={40}
+              className="hidden h-10 w-10 shrink-0 object-contain dark:block"
             />
           </Link>
         )}
@@ -86,7 +110,7 @@ export function AppSidebar({
           <Button
             variant="ghost"
             size="icon"
-            className="shrink-0"
+            className="shrink-0 text-muted-foreground hover:text-foreground"
             onClick={onToggleCollapse}
             title={collapsed ? "Expand sidebar" : "Collapse sidebar"}
             aria-label={collapsed ? "Expand sidebar" : "Collapse sidebar"}
@@ -96,8 +120,8 @@ export function AppSidebar({
         ) : null}
       </div>
 
-      <ScrollArea className="flex-1 py-3">
-        <nav className="flex flex-col gap-0.5 px-2">
+      <ScrollArea className="flex-1 py-2">
+        <nav className="flex flex-col gap-1 px-2">
           {nav.map(({ href, label, icon: Icon }) => {
             const active =
               href === "/"
@@ -110,14 +134,17 @@ export function AppSidebar({
                 title={collapsed ? label : undefined}
                 onClick={() => onNavigate?.()}
                 className={cn(
-                  "flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-colors",
+                  "group relative flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium transition-all duration-200",
                   active
-                    ? "bg-sidebar-primary/15 text-sidebar-primary"
-                    : "text-sidebar-foreground/80 hover:bg-sidebar-accent/50 hover:text-sidebar-foreground",
+                    ? "bg-primary/10 text-primary shadow-sm"
+                    : "text-muted-foreground hover:bg-accent hover:text-foreground",
                   collapsed && "justify-center px-2",
                 )}
               >
-                <Icon className="size-[18px] shrink-0" />
+                {active && (
+                  <span className="bg-primary absolute left-0 top-1/2 h-5 w-[3px] -translate-y-1/2 rounded-r-full" />
+                )}
+                <Icon className={cn("size-[18px] shrink-0 transition-colors", active && "text-primary")} />
                 {!collapsed ? label : null}
               </Link>
             );
@@ -125,13 +152,12 @@ export function AppSidebar({
         </nav>
       </ScrollArea>
 
-      <Separator className="bg-sidebar-border" />
-      <div className="p-2">
+      <div className="border-t border-sidebar-border/50 p-2">
         <Button
           variant="ghost"
           title={collapsed ? "Sign out" : undefined}
           className={cn(
-            "text-muted-foreground hover:text-destructive w-full justify-start gap-3",
+            "text-muted-foreground hover:text-destructive w-full justify-start gap-3 rounded-xl",
             collapsed && "justify-center px-0",
           )}
           onClick={() => void signOut()}

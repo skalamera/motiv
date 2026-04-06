@@ -43,16 +43,25 @@ export default function LoginPage() {
   }
 
   return (
-    <Card className="glass-card w-full max-w-md border-white/10 bg-card/40 shadow-2xl backdrop-blur-xl">
+    <Card className="gradient-border w-full max-w-md border border-border bg-card/95 text-card-foreground shadow-2xl backdrop-blur-2xl dark:border-white/10 dark:bg-white/5">
       <CardHeader className="space-y-4 text-center">
         <Link href="/" className="mx-auto block">
+          {/* Light mode: wordmark; dark mode: mark only */}
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img
             src="/logo_full.svg"
             alt="Motiv"
             width={200}
             height={80}
-            className="mx-auto h-auto w-48"
+            className="mx-auto h-auto w-auto max-w-[200px] rounded-none dark:hidden"
+          />
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img
+            src="/motiv.svg?v=2"
+            alt="Motiv"
+            width={192}
+            height={192}
+            className="mx-auto hidden h-auto w-48 rounded-none dark:block"
           />
         </Link>
         <CardDescription className="text-muted-foreground">
@@ -65,7 +74,9 @@ export default function LoginPage() {
             <p className="text-destructive text-center text-sm">{error}</p>
           ) : null}
           <div className="space-y-2">
-            <Label htmlFor="email">Email</Label>
+            <Label htmlFor="email" className="text-foreground">
+              Email
+            </Label>
             <Input
               id="email"
               type="email"
@@ -77,7 +88,9 @@ export default function LoginPage() {
             />
           </div>
           <div className="space-y-2">
-            <Label htmlFor="password">Password</Label>
+            <Label htmlFor="password" className="text-foreground">
+              Password
+            </Label>
             <Input
               id="password"
               type="password"
@@ -90,7 +103,7 @@ export default function LoginPage() {
           </div>
         </CardContent>
         <CardFooter className="flex flex-col gap-4">
-          <Button type="submit" className="w-full" disabled={loading}>
+          <Button type="submit" className="ai-gradient glow-primary w-full rounded-xl border-0 text-white shadow-md hover:opacity-90 disabled:opacity-50" disabled={loading}>
             {loading ? "Signing in…" : "Sign in"}
           </Button>
           <p className="text-muted-foreground text-center text-sm">

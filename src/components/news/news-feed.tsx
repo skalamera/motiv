@@ -50,7 +50,7 @@ export function NewsFeed() {
             <TabsTrigger
               key={key}
               value={key}
-              className="data-[state=active]:bg-primary data-[state=active]:text-primary-foreground rounded-full border px-3 py-1 text-xs capitalize"
+              className="data-[state=active]:bg-primary/10 data-[state=active]:text-primary data-[state=active]:border-primary/30 rounded-full border border-border/50 px-3 py-1 text-xs capitalize transition-all"
             >
               {label}
             </TabsTrigger>
@@ -130,8 +130,8 @@ function NewsForMake({ make, slug }: { make: string; slug: string }) {
           rel="noreferrer"
           className="group block"
         >
-          <Card className="glass-card border-white/10 bg-card/40 h-full overflow-hidden transition-colors hover:border-primary/30">
-            <div className="relative aspect-video w-full overflow-hidden bg-muted">
+          <Card className="h-full overflow-hidden border border-border/50 bg-card/50 backdrop-blur-sm transition-all duration-300 hover:border-primary/30 hover:shadow-lg hover:shadow-primary/5">
+            <div className="relative aspect-video w-full overflow-hidden bg-muted/50">
               {a.urlToImage ? (
                 // eslint-disable-next-line @next/next/no-img-element
                 <img

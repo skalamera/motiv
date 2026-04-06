@@ -36,3 +36,26 @@ export async function fetchCarNews(
   }
   return json.articles;
 }
+
+export const MAX_MAKES_PER_REQUEST = 15;
+
+/** Dedupe by URL and sort newest first (for multi-manufacturer feeds). */
+export function mergeNewsArticlesByRecency(
+  groups: NewsArticle[][],
+): NewsArticle[] {
+  const seen = new Set<string>();
+  const merged: NewsArticle[] = [];
+  for (const articles of groups) {
+    for (const a of articles) {
+      const u = a.url;
+      if (!u || seen.has(u)) continue;
+      seen.add(u);
+      merged.push(a);
+    }
+  }
+  merged.sort(
+    (a, b) =>
+      new Date(b.publishedAt).getTime() - new Date(a.publishedAt).getTime(),
+  );
+  return merged;
+}
