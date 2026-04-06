@@ -27,6 +27,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { useCarSelection } from "@/hooks/use-car-selection";
 import { createClient } from "@/lib/supabase/client";
 import type { Car } from "@/types/database";
 import { cn } from "@/lib/utils";
@@ -52,7 +53,7 @@ export function QuickAsk() {
   const [carsLoading, setCarsLoading] = useState(true);
   const [promptDialogOpen, setPromptDialogOpen] = useState(false);
   const [pendingPrompt, setPendingPrompt] = useState<string | null>(null);
-  const [selectedCarId, setSelectedCarId] = useState<string | null>(null);
+  const [selectedCarId, setSelectedCarId] = useCarSelection("");
 
   useEffect(() => {
     const supabase = createClient();
@@ -78,7 +79,6 @@ export function QuickAsk() {
 
   function onQuickPromptClick(text: string) {
     setPendingPrompt(text);
-    setSelectedCarId(null);
     setPromptDialogOpen(true);
   }
 
@@ -179,7 +179,7 @@ export function QuickAsk() {
           ) : cars.length > 0 ? (
             <Select
               value={selectedCarId ?? ""}
-              onValueChange={(v) => setSelectedCarId(v)}
+              onValueChange={(v) => setSelectedCarId(v || "")}
             >
               <SelectTrigger className="w-full">
                 <SelectValue placeholder="Select a vehicle" />

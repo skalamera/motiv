@@ -3,10 +3,17 @@
 import { useCallback, useEffect, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
 import type { Car, MaintenanceSchedule } from "@/types/database";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import {
   Dialog,
@@ -24,7 +31,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { Loader2, Plus, Sparkles, Trash2 } from "lucide-react";
-import { ScrollArea } from "@/components/ui/scroll-area";
+import { useCarSelection } from "@/hooks/use-car-selection";
 
 type ServiceLogRow = {
   id: string;
@@ -33,6 +40,8 @@ type ServiceLogRow = {
   notes: string | null;
   cost: number | null;
   taskLabel: string;
+  title: string | null;
+  schedule_id: string | null;
 };
 
 function formatShortDate(iso: string | null): string {
@@ -67,11 +76,13 @@ function ScheduleRow({
   car,
   onLogged,
   onDelete,
+  onUpdated,
 }: {
   row: MaintenanceSchedule;
   car: Car;
   onLogged: () => void;
   onDelete: () => void;
+  onUpdated: () => void;
 }) {
   const [open, setOpen] = useState(false);
   const [mileage, setMileage] = useState(String(car.mileage));
@@ -79,7 +90,23 @@ function ScheduleRow({
   const [cost, setCost] = useState("");
   const [saving, setSaving] = useState(false);
 
-  async function logDone() {
+  const [editOpen, setEditOpen] = useState(false);
+  const [editTask, setEditTask] = useState(row.task);
+  const [editMiles, setEditMiles] = useState(row.interval_miles ? String(row.interval_miles) : "");
+  const [editMonths, setEditMonths] = useState(row.interval_months ? String(row.interval_months) : "");
+  const [editNotes, setEditNotes] = useState(row.notes || "");
+  const [editSaving, setEditSaving] = useState(false);
+
+  function openEditModal() {
+    setEditTask(row.task);
+    setEditMiles(row.interval_miles ? String(row.interval_miles) : "");
+    setEditMonths(row.interval_months ? String(row.interval_months) : "");
+    setEditNotes(row.notes || "");
+    setEditOpen(true);
+  }
+
+  async function logDone(e?: React.MouseEvent) {
+    if (e) e.stopPropagation();
     setSaving(true);
     const supabase = createClient();
     const mi = mileage ? parseInt(mileage, 10) : null;
@@ -111,89 +138,372 @@ function ScheduleRow({
     onLogged();
   }
 
+  async function saveEdit() {
+    setEditSaving(true);
+    const supabase = createClient();
+    const miParsed = editMiles.trim() ? parseInt(editMiles, 10) : null;
+    const moParsed = editMonths.trim() ? parseInt(editMonths, 10) : null;
+
+    const { error } = await supabase
+      .from("maintenance_schedules")
+      .update({
+        task: editTask.trim(),
+        interval_miles: miParsed,
+        interval_months: moParsed,
+        notes: editNotes.trim() || null,
+      })
+      .eq("id", row.id);
+
+    setEditSaving(false);
+    if (error) {
+      alert(error.message);
+      return;
+    }
+    setEditOpen(false);
+    onUpdated();
+  }
+
   return (
-    <TableRow>
-      <TableCell className="font-medium">{row.task}</TableCell>
-      <TableCell className="text-muted-foreground text-sm">
-        {row.interval_miles
-          ? `${row.interval_miles.toLocaleString()} mi`
-          : "—"}
-        {row.interval_months ? ` / ${row.interval_months} mo` : ""}
-      </TableCell>
-      <TableCell>
-        <Badge variant="outline" className="text-[10px] capitalize">
-          {row.source}
-        </Badge>
-      </TableCell>
-      <TableCell className="text-muted-foreground max-w-[180px] truncate text-xs">
-        {row.notes ?? "—"}
-      </TableCell>
-      <TableCell className="text-muted-foreground whitespace-nowrap text-xs">
-        {formatShortDate(row.last_completed_at)}
-      </TableCell>
-      <TableCell className="text-right">
-        <div className="flex justify-end gap-1">
-          <Dialog open={open} onOpenChange={setOpen}>
+    <>
+      <TableRow 
+        className="cursor-pointer hover:bg-muted/50" 
+        onClick={() => openEditModal()}
+      >
+        <TableCell className="font-medium">{row.task}</TableCell>
+        <TableCell className="text-muted-foreground text-sm">
+          {row.interval_miles
+            ? `${row.interval_miles.toLocaleString()} mi`
+            : "—"}
+          {row.interval_months ? ` / ${row.interval_months} mo` : ""}
+        </TableCell>
+        <TableCell>
+          <Badge variant="outline" className="text-[10px] capitalize">
+            {row.source}
+          </Badge>
+        </TableCell>
+        <TableCell className="text-muted-foreground max-w-[180px] truncate text-xs">
+          {row.notes ?? "—"}
+        </TableCell>
+        <TableCell className="text-muted-foreground whitespace-nowrap text-xs">
+          {formatShortDate(row.last_completed_at)}
+        </TableCell>
+        <TableCell className="text-right">
+          <div className="flex justify-end gap-1">
             <Button
               size="sm"
               variant="secondary"
               type="button"
-              onClick={() => setOpen(true)}
+              onClick={(e) => {
+                e.stopPropagation();
+                setOpen(true);
+              }}
             >
               Log done
             </Button>
-            <DialogContent>
-              <DialogHeader>
-                <DialogTitle>Log {row.task}</DialogTitle>
-              </DialogHeader>
-              <div className="space-y-3 py-2">
-                <div>
-                  <Label>Odometer (mi)</Label>
-                  <Input
-                    value={mileage}
-                    onChange={(e) => setMileage(e.target.value)}
-                    type="number"
-                  />
-                </div>
-                <div>
-                  <Label>Cost (optional)</Label>
-                  <Input
-                    value={cost}
-                    onChange={(e) => setCost(e.target.value)}
-                    type="number"
-                    step="0.01"
-                  />
-                </div>
-                <div>
-                  <Label>Notes</Label>
-                  <Input
-                    value={notes}
-                    onChange={(e) => setNotes(e.target.value)}
-                  />
-                </div>
+            <Button
+              size="icon"
+              variant="ghost"
+              className="text-muted-foreground hover:text-destructive"
+              onClick={(e) => {
+                e.stopPropagation();
+                onDelete();
+              }}
+            >
+              <Trash2 className="size-4" />
+            </Button>
+          </div>
+        </TableCell>
+      </TableRow>
+
+      <Dialog open={open} onOpenChange={setOpen}>
+        <DialogContent onClick={(e) => e.stopPropagation()}>
+          <DialogHeader>
+            <DialogTitle>Log {row.task}</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-3 py-2">
+            <div>
+              <Label>Odometer (mi)</Label>
+              <Input
+                value={mileage}
+                onChange={(e) => setMileage(e.target.value)}
+                type="number"
+              />
+            </div>
+            <div>
+              <Label>Cost (optional)</Label>
+              <Input
+                value={cost}
+                onChange={(e) => setCost(e.target.value)}
+                type="number"
+                step="0.01"
+              />
+            </div>
+            <div>
+              <Label>Notes</Label>
+              <Textarea
+                value={notes}
+                onChange={(e) => setNotes(e.target.value)}
+                rows={3}
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button onClick={(e) => void logDone(e)} disabled={saving}>
+              {saving ? (
+                <Loader2 className="size-4 animate-spin" />
+              ) : (
+                "Save log"
+              )}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={editOpen} onOpenChange={setEditOpen}>
+        <DialogContent onClick={(e) => e.stopPropagation()}>
+          <DialogHeader>
+            <DialogTitle>Edit Schedule Task</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-3 py-2">
+            <div>
+              <Label>Task</Label>
+              <Input
+                value={editTask}
+                onChange={(e) => setEditTask(e.target.value)}
+              />
+            </div>
+            <div className="grid grid-cols-2 gap-2">
+              <div>
+                <Label>Every (miles)</Label>
+                <Input
+                  value={editMiles}
+                  onChange={(e) => setEditMiles(e.target.value)}
+                  type="number"
+                />
               </div>
-              <DialogFooter>
-                <Button onClick={() => void logDone()} disabled={saving}>
-                  {saving ? (
-                    <Loader2 className="size-4 animate-spin" />
-                  ) : (
-                    "Save log"
-                  )}
-                </Button>
-              </DialogFooter>
-            </DialogContent>
-          </Dialog>
-          <Button
-            size="icon"
-            variant="ghost"
-            className="text-muted-foreground hover:text-destructive"
-            onClick={onDelete}
-          >
-            <Trash2 className="size-4" />
-          </Button>
-        </div>
-      </TableCell>
-    </TableRow>
+              <div>
+                <Label>Every (months)</Label>
+                <Input
+                  value={editMonths}
+                  onChange={(e) => setEditMonths(e.target.value)}
+                  type="number"
+                />
+              </div>
+            </div>
+            <div>
+              <Label>Notes</Label>
+              <Textarea
+                value={editNotes}
+                onChange={(e) => setEditNotes(e.target.value)}
+                rows={3}
+              />
+            </div>
+          </div>
+          <DialogFooter className="flex justify-between sm:justify-between">
+            <Button
+              type="button"
+              variant="destructive"
+              onClick={(e) => {
+                e.stopPropagation();
+                setEditOpen(false);
+                onDelete();
+              }}
+            >
+              <Trash2 className="mr-2 size-4" />
+              Delete
+            </Button>
+            <div className="flex gap-2">
+              <Button type="button" variant="outline" onClick={() => setEditOpen(false)}>
+                Cancel
+              </Button>
+              <Button onClick={() => void saveEdit()} disabled={editSaving || !editTask.trim()}>
+                {editSaving ? <Loader2 className="size-4 animate-spin" /> : "Save changes"}
+              </Button>
+            </div>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    </>
+  );
+}
+
+function HistoryRow({
+  log,
+  onUpdated,
+  onDelete,
+}: {
+  log: ServiceLogRow;
+  onUpdated: () => void;
+  onDelete: () => void;
+}) {
+  const [editOpen, setEditOpen] = useState(false);
+  const [editTitle, setEditTitle] = useState(log.title || "");
+  const [editDate, setEditDate] = useState(() => {
+    if (!log.completed_at) return todayYmd();
+    try {
+      return log.completed_at.split("T")[0];
+    } catch {
+      return todayYmd();
+    }
+  });
+  const [editMileage, setEditMileage] = useState(log.mileage_at ? String(log.mileage_at) : "");
+  const [editCost, setEditCost] = useState(log.cost ? String(log.cost) : "");
+  const [editNotes, setEditNotes] = useState(log.notes || "");
+  const [saving, setSaving] = useState(false);
+
+  function openEditModal() {
+    setEditTitle(log.title || "");
+    try {
+      setEditDate(log.completed_at ? log.completed_at.split("T")[0] : todayYmd());
+    } catch {
+      setEditDate(todayYmd());
+    }
+    setEditMileage(log.mileage_at ? String(log.mileage_at) : "");
+    setEditCost(log.cost ? String(log.cost) : "");
+    setEditNotes(log.notes || "");
+    setEditOpen(true);
+  }
+
+  async function saveEdit() {
+    setSaving(true);
+    const supabase = createClient();
+    const miParsed = editMileage.trim() ? parseInt(editMileage, 10) : null;
+    const costParsed = editCost.trim() ? parseFloat(editCost) : null;
+
+    const { error } = await supabase
+      .from("maintenance_logs")
+      .update({
+        title: editTitle.trim() || null,
+        completed_at: localDateToNoonIso(editDate),
+        mileage_at: miParsed,
+        cost: costParsed,
+        notes: editNotes.trim() || null,
+      })
+      .eq("id", log.id);
+
+    setSaving(false);
+    if (error) {
+      alert(error.message);
+      return;
+    }
+    setEditOpen(false);
+    onUpdated();
+  }
+
+  return (
+    <>
+      <TableRow className="cursor-pointer hover:bg-muted/50" onClick={() => openEditModal()}>
+        <TableCell className="whitespace-nowrap text-sm">
+          {formatShortDate(log.completed_at)}
+        </TableCell>
+        <TableCell className="font-medium">{log.taskLabel}</TableCell>
+        <TableCell className="text-muted-foreground text-sm">
+          {log.mileage_at != null
+            ? `${log.mileage_at.toLocaleString()} mi`
+            : "—"}
+        </TableCell>
+        <TableCell className="text-muted-foreground text-sm">
+          {log.cost != null
+            ? `$${Number(log.cost).toFixed(2)}`
+            : "—"}
+        </TableCell>
+        <TableCell className="text-muted-foreground max-w-[200px] truncate text-xs">
+          {log.notes ?? "—"}
+        </TableCell>
+      </TableRow>
+
+      <Dialog open={editOpen} onOpenChange={setEditOpen}>
+        <DialogContent onClick={(e) => e.stopPropagation()}>
+          <DialogHeader>
+            <DialogTitle>Edit Service Log</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-3 py-1">
+            <div>
+              <Label>Service / task name</Label>
+              <Input
+                value={editTitle}
+                onChange={(e) => setEditTitle(e.target.value)}
+                placeholder={log.schedule_id ? "Leave blank to use schedule task name" : "e.g. Tire patch"}
+              />
+              {log.schedule_id && !editTitle && (
+                <p className="text-xs text-muted-foreground mt-1">
+                  Using schedule name: {log.taskLabel}
+                </p>
+              )}
+            </div>
+            <div>
+              <Label>Date</Label>
+              <Input
+                type="date"
+                value={editDate}
+                onChange={(e) => setEditDate(e.target.value)}
+              />
+            </div>
+            <div>
+              <Label>Odometer (mi)</Label>
+              <Input
+                type="number"
+                value={editMileage}
+                onChange={(e) => setEditMileage(e.target.value)}
+              />
+            </div>
+            <div>
+              <Label>Cost</Label>
+              <Input
+                type="number"
+                step="0.01"
+                value={editCost}
+                onChange={(e) => setEditCost(e.target.value)}
+              />
+            </div>
+            <div>
+              <Label>Notes</Label>
+              <Textarea
+                value={editNotes}
+                onChange={(e) => setEditNotes(e.target.value)}
+                rows={3}
+              />
+            </div>
+          </div>
+          <DialogFooter className="flex justify-between sm:justify-between">
+            <Button
+              type="button"
+              variant="destructive"
+              onClick={(e) => {
+                e.stopPropagation();
+                if (confirm("Delete this service log?")) {
+                  setEditOpen(false);
+                  onDelete();
+                }
+              }}
+            >
+              <Trash2 className="mr-2 size-4" />
+              Delete
+            </Button>
+            <div className="flex gap-2">
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => setEditOpen(false)}
+              >
+                Cancel
+              </Button>
+              <Button
+                type="button"
+                onClick={() => void saveEdit()}
+                disabled={saving || (!editTitle.trim() && !log.schedule_id)}
+              >
+                {saving ? (
+                  <Loader2 className="size-4 animate-spin" />
+                ) : (
+                  "Save changes"
+                )}
+              </Button>
+            </div>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    </>
   );
 }
 
@@ -203,7 +513,7 @@ export function MaintenanceTracker({ initialCarId }: { initialCarId: string | nu
     {},
   );
   const [logsByCar, setLogsByCar] = useState<Record<string, ServiceLogRow[]>>({});
-  const [tab, setTab] = useState<string>("");
+  const [tab, setTab] = useCarSelection("");
   const [loading, setLoading] = useState(true);
   const [generating, setGenerating] = useState(false);
   const [addOpen, setAddOpen] = useState(false);
@@ -284,6 +594,7 @@ export function MaintenanceTracker({ initialCarId }: { initialCarId: string | nu
         .select(
           `
           id,
+          schedule_id,
           completed_at,
           mileage_at,
           notes,
@@ -298,6 +609,7 @@ export function MaintenanceTracker({ initialCarId }: { initialCarId: string | nu
 
       type LogJoin = {
         id: string;
+        schedule_id: string | null;
         completed_at: string;
         mileage_at: number | null;
         notes: string | null;
@@ -317,6 +629,8 @@ export function MaintenanceTracker({ initialCarId }: { initialCarId: string | nu
           notes: row.notes,
           cost: row.cost,
           taskLabel: fromSchedule || fromTitle || "Service",
+          title: row.title,
+          schedule_id: row.schedule_id,
         };
       });
     }
@@ -330,13 +644,18 @@ export function MaintenanceTracker({ initialCarId }: { initialCarId: string | nu
   }, [load]);
 
   useEffect(() => {
-    if (cars.length === 0 || tab) return;
-    const first =
-      initialCarId && cars.some((c) => c.id === initialCarId)
-        ? initialCarId
-        : cars[0].id;
-    setTab(first);
-  }, [cars, tab, initialCarId]);
+    if (cars.length === 0) return;
+    
+    // Default to the first car (if there's only 1, this acts as the auto-select)
+    // Or if the initialCarId is valid
+    if (!tab || !cars.some(c => c.id === tab)) {
+      const first =
+        initialCarId && cars.some((c) => c.id === initialCarId)
+          ? initialCarId
+          : cars[0].id;
+      setTab(first);
+    }
+  }, [cars, tab, initialCarId, setTab]);
 
   async function runGenerate() {
     if (!tab) return;
@@ -389,6 +708,12 @@ export function MaintenanceTracker({ initialCarId }: { initialCarId: string | nu
     await load();
   }
 
+  async function deleteLog(id: string) {
+    const supabase = createClient();
+    await supabase.from("maintenance_logs").delete().eq("id", id);
+    await load();
+  }
+
   if (loading) {
     return (
       <div className="text-muted-foreground flex items-center gap-2 text-sm">
@@ -412,204 +737,189 @@ export function MaintenanceTracker({ initialCarId }: { initialCarId: string | nu
 
   return (
     <div className="space-y-4">
-      <Tabs value={tab} onValueChange={setTab}>
-        <ScrollArea className="w-full pb-2">
-          <TabsList className="inline-flex h-auto flex-wrap justify-start gap-1 bg-transparent p-0">
+      <div className="flex justify-between items-center mb-4">
+        <Select value={tab} onValueChange={(val) => val && setTab(val)}>
+          <SelectTrigger className="w-[280px]">
+            <SelectValue placeholder="Select a car" />
+          </SelectTrigger>
+          <SelectContent>
             {cars.map((c) => (
-              <TabsTrigger
-                key={c.id}
-                value={c.id}
-                className="data-[state=active]:bg-primary/10 data-[state=active]:text-primary data-[state=active]:border-primary/30 rounded-full border border-border/50 px-3 py-1 text-xs transition-all"
-              >
+              <SelectItem key={c.id} value={c.id}>
                 {c.year} {c.make} {c.model}
-              </TabsTrigger>
+              </SelectItem>
             ))}
-          </TabsList>
-        </ScrollArea>
+          </SelectContent>
+        </Select>
+      </div>
 
-        {cars.map((c) => (
-          <TabsContent key={c.id} value={c.id} className="mt-4 space-y-4">
-            <div className="flex flex-wrap gap-2">
-              <Button
-                onClick={() => void runGenerate()}
-                disabled={generating || tab !== c.id}
-                className="ai-gradient glow-primary rounded-xl border-0 text-white shadow-md hover:opacity-90 disabled:opacity-50"
-              >
-                {generating ? (
-                  <Loader2 className="mr-2 size-4 animate-spin" />
-                ) : (
-                  <Sparkles className="mr-2 size-4" />
-                )}
-                Auto-populate (AI)
-              </Button>
-              <Dialog open={addOpen} onOpenChange={setAddOpen}>
-                <Button
-                  variant="secondary"
-                  type="button"
-                  onClick={() => setAddOpen(true)}
-                >
-                  <Plus className="mr-2 size-4" />
-                  Add row
-                </Button>
-                <DialogContent>
-                  <DialogHeader>
-                    <DialogTitle>Custom maintenance item</DialogTitle>
-                  </DialogHeader>
-                  <div className="space-y-3">
-                    <div>
-                      <Label>Task</Label>
-                      <Input
-                        value={newTask}
-                        onChange={(e) => setNewTask(e.target.value)}
-                        placeholder="e.g. Cabin air filter"
-                      />
-                    </div>
-                    <div className="grid grid-cols-2 gap-2">
-                      <div>
-                        <Label>Every (miles)</Label>
-                        <Input
-                          value={newMiles}
-                          onChange={(e) => setNewMiles(e.target.value)}
-                          type="number"
-                        />
-                      </div>
-                      <div>
-                        <Label>Every (months)</Label>
-                        <Input
-                          value={newMonths}
-                          onChange={(e) => setNewMonths(e.target.value)}
-                          type="number"
-                        />
-                      </div>
-                    </div>
-                  </div>
-                  <DialogFooter>
-                    <Button onClick={() => void addCustom()}>Save</Button>
-                  </DialogFooter>
-                </DialogContent>
-              </Dialog>
-            </div>
-
-            <div className="rounded-xl border border-border/50 bg-card/50 backdrop-blur-sm">
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Task</TableHead>
-                    <TableHead>Interval</TableHead>
-                    <TableHead>Source</TableHead>
-                    <TableHead>Notes</TableHead>
-                    <TableHead>Last done</TableHead>
-                    <TableHead className="text-right">Actions</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {rows.length === 0 ? (
-                    <TableRow>
-                      <TableCell
-                        colSpan={6}
-                        className="text-muted-foreground text-center text-sm"
-                      >
-                        No rows yet. Run auto-populate or add your own.
-                      </TableCell>
-                    </TableRow>
-                  ) : (
-                    rows.map((row) => (
-                      <ScheduleRow
-                        key={row.id}
-                        row={row}
-                        car={c}
-                        onLogged={() => void load()}
-                        onDelete={() => void deleteSchedule(row.id)}
-                      />
-                    ))
-                  )}
-                </TableBody>
-              </Table>
-            </div>
-
-            <div className="rounded-xl border border-border/50 bg-card/50 backdrop-blur-sm">
-              <div className="border-border/50 flex flex-col gap-3 border-b px-4 py-3 sm:flex-row sm:items-start sm:justify-between">
+      <div className="mt-4 space-y-4">
+        <div className="flex flex-wrap gap-2">
+          <Button
+            onClick={() => void runGenerate()}
+            disabled={generating}
+            className="ai-gradient glow-primary rounded-xl border-0 text-white shadow-md hover:opacity-90 disabled:opacity-50"
+          >
+            {generating ? (
+              <Loader2 className="mr-2 size-4 animate-spin" />
+            ) : (
+              <Sparkles className="mr-2 size-4" />
+            )}
+            Auto-populate (AI)
+          </Button>
+          <Dialog open={addOpen} onOpenChange={setAddOpen}>
+            <Button
+              variant="secondary"
+              type="button"
+              onClick={() => setAddOpen(true)}
+            >
+              <Plus className="mr-2 size-4" />
+              Add row
+            </Button>
+            <DialogContent>
+              <DialogHeader>
+                <DialogTitle>Custom maintenance item</DialogTitle>
+              </DialogHeader>
+              <div className="space-y-3">
                 <div>
-                  <h3 className="text-sm font-semibold tracking-tight">
-                    Service history
-                  </h3>
-                  <p className="text-muted-foreground mt-0.5 max-w-xl text-xs">
-                    <strong className="text-foreground font-medium">Log done</strong> on a
-                    task above, or{" "}
-                    <strong className="text-foreground font-medium">add a manual entry</strong>{" "}
-                    for work that isn&apos;t on your schedule. Separate from what&apos;s due
-                    next.
-                  </p>
+                  <Label>Task</Label>
+                  <Input
+                    value={newTask}
+                    onChange={(e) => setNewTask(e.target.value)}
+                    placeholder="e.g. Cabin air filter"
+                  />
                 </div>
-                <Button
-                  type="button"
-                  variant="secondary"
-                  size="sm"
-                  className="shrink-0"
-                  onClick={() => openManualLog(c)}
-                >
-                  <Plus className="mr-1.5 size-3.5" />
-                  Add manual log
-                </Button>
+                <div className="grid grid-cols-2 gap-2">
+                  <div>
+                    <Label>Every (miles)</Label>
+                    <Input
+                      value={newMiles}
+                      onChange={(e) => setNewMiles(e.target.value)}
+                      type="number"
+                    />
+                  </div>
+                  <div>
+                    <Label>Every (months)</Label>
+                    <Input
+                      value={newMonths}
+                      onChange={(e) => setNewMonths(e.target.value)}
+                      type="number"
+                    />
+                  </div>
+                </div>
               </div>
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Date</TableHead>
-                    <TableHead>Task</TableHead>
-                    <TableHead>Odometer</TableHead>
-                    <TableHead>Cost</TableHead>
-                    <TableHead className="max-w-[200px]">Notes</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {historyRows.length === 0 ? (
-                    <TableRow>
-                      <TableCell
-                        colSpan={5}
-                        className="text-muted-foreground py-8 text-center text-sm"
-                      >
-                        No services logged yet. Use{" "}
-                        <span className="text-foreground font-medium">Log done</span> or{" "}
-                        <span className="text-foreground font-medium">Add manual log</span>.
-                      </TableCell>
-                    </TableRow>
-                  ) : (
-                    historyRows.map((log) => (
-                      <TableRow key={log.id}>
-                        <TableCell className="whitespace-nowrap text-sm">
-                          {formatShortDate(log.completed_at)}
-                        </TableCell>
-                        <TableCell className="font-medium">{log.taskLabel}</TableCell>
-                        <TableCell className="text-muted-foreground text-sm">
-                          {log.mileage_at != null
-                            ? `${log.mileage_at.toLocaleString()} mi`
-                            : "—"}
-                        </TableCell>
-                        <TableCell className="text-muted-foreground text-sm">
-                          {log.cost != null
-                            ? `$${Number(log.cost).toFixed(2)}`
-                            : "—"}
-                        </TableCell>
-                        <TableCell className="text-muted-foreground max-w-[200px] truncate text-xs">
-                          {log.notes ?? "—"}
-                        </TableCell>
-                      </TableRow>
-                    ))
-                  )}
-                </TableBody>
-              </Table>
-            </div>
+              <DialogFooter>
+                <Button onClick={() => void addCustom()}>Save</Button>
+              </DialogFooter>
+            </DialogContent>
+          </Dialog>
+        </div>
 
-            <div className="text-muted-foreground text-xs">
-              Logging from the schedule updates the{" "}
-              <strong className="text-foreground font-medium">Last done</strong> column for
-              that task. Manual entries only appear in history. Refine intervals anytime
-              with custom rows.
+        <div className="rounded-xl border border-border/50 bg-card/50 backdrop-blur-sm">
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>Task</TableHead>
+                <TableHead>Interval</TableHead>
+                <TableHead>Source</TableHead>
+                <TableHead>Notes</TableHead>
+                <TableHead>Last done</TableHead>
+                <TableHead className="text-right">Actions</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {rows.length === 0 ? (
+                <TableRow>
+                  <TableCell
+                    colSpan={6}
+                    className="text-muted-foreground text-center text-sm"
+                  >
+                    No rows yet. Run auto-populate or add your own.
+                  </TableCell>
+                </TableRow>
+              ) : (
+                rows.map((row) => (
+                  <ScheduleRow
+                    key={row.id}
+                    row={row}
+                    car={active}
+                    onLogged={() => void load()}
+                    onDelete={() => void deleteSchedule(row.id)}
+                    onUpdated={() => void load()}
+                  />
+                ))
+              )}
+            </TableBody>
+          </Table>
+        </div>
+
+        <div className="rounded-xl border border-border/50 bg-card/50 backdrop-blur-sm">
+          <div className="border-border/50 flex flex-col gap-3 border-b px-4 py-3 sm:flex-row sm:items-start sm:justify-between">
+            <div>
+              <h3 className="text-sm font-semibold tracking-tight">
+                Service history
+              </h3>
+              <p className="text-muted-foreground mt-0.5 max-w-xl text-xs">
+                <strong className="text-foreground font-medium">Log done</strong> on a
+                task above, or{" "}
+                <strong className="text-foreground font-medium">add a manual entry</strong>{" "}
+                for work that isn&apos;t on your schedule. Separate from what&apos;s due
+                next.
+              </p>
             </div>
-          </TabsContent>
-        ))}
-      </Tabs>
+            <Button
+              type="button"
+              variant="secondary"
+              size="sm"
+              className="shrink-0"
+              onClick={() => openManualLog(active)}
+            >
+              <Plus className="mr-1.5 size-3.5" />
+              Add manual log
+            </Button>
+          </div>
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>Date</TableHead>
+                <TableHead>Task</TableHead>
+                <TableHead>Odometer</TableHead>
+                <TableHead>Cost</TableHead>
+                <TableHead className="max-w-[200px]">Notes</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {historyRows.length === 0 ? (
+                <TableRow>
+                  <TableCell
+                    colSpan={5}
+                    className="text-muted-foreground py-8 text-center text-sm"
+                  >
+                    No services logged yet. Use{" "}
+                    <span className="text-foreground font-medium">Log done</span> or{" "}
+                    <span className="text-foreground font-medium">Add manual log</span>.
+                  </TableCell>
+                </TableRow>
+              ) : (
+                historyRows.map((log) => (
+                  <HistoryRow
+                    key={log.id}
+                    log={log}
+                    onUpdated={() => void load()}
+                    onDelete={() => void deleteLog(log.id)}
+                  />
+                ))
+              )}
+            </TableBody>
+          </Table>
+        </div>
+
+        <div className="text-muted-foreground text-xs">
+          Logging from the schedule updates the{" "}
+          <strong className="text-foreground font-medium">Last done</strong> column for
+          that task. Manual entries only appear in history. Refine intervals anytime
+          with custom rows.
+        </div>
+      </div>
 
       <Dialog open={manualLogOpen} onOpenChange={setManualLogOpen}>
         <DialogContent className="sm:max-w-md">
@@ -653,10 +963,11 @@ export function MaintenanceTracker({ initialCarId }: { initialCarId: string | nu
             </div>
             <div>
               <Label>Notes (optional)</Label>
-              <Input
+              <Textarea
                 value={manualNotes}
                 onChange={(e) => setManualNotes(e.target.value)}
                 placeholder="Parts, shop name, warranty…"
+                rows={3}
               />
             </div>
           </div>

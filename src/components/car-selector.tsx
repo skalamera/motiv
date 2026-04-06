@@ -11,6 +11,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Label } from "@/components/ui/label";
+import { useCarSelection } from "@/hooks/use-car-selection";
 
 type Props = {
   value: string | null;
@@ -32,6 +33,7 @@ export function CarSelector({
 }: Props) {
   const [cars, setCars] = useState<Car[]>([]);
   const [loading, setLoading] = useState(true);
+  const [persistedId, setPersistedId] = useCarSelection("");
 
   useEffect(() => {
     const supabase = createClient();
@@ -44,6 +46,22 @@ export function CarSelector({
         setLoading(false);
       });
   }, []);
+
+  // Sync with persisted id when loaded
+  useEffect(() => {
+    if (!loading && cars.length > 0) {
+      if (!value && persistedId && cars.some(c => c.id === persistedId)) {
+        onChange(persistedId);
+      } else if (value && value !== persistedId) {
+        setPersistedId(value);
+      }
+    }
+  }, [loading, cars, value, persistedId, onChange, setPersistedId]);
+
+  const handleChange = (v: string | null) => {
+    setPersistedId(v || "");
+    onChange(v);
+  };
 
   if (loading && cars.length === 0) {
     return (
@@ -72,7 +90,7 @@ export function CarSelector({
       <Select
         modal={false}
         value={value ?? ""}
-        onValueChange={(v) => onChange(v === "" ? null : v)}
+        onValueChange={(v) => handleChange(v === "" ? null : v)}
       >
         <SelectTrigger className="bg-background/50 h-auto min-h-9 w-full min-w-[min(100%,22rem)] max-w-xl sm:min-w-[26rem]">
           <SelectValue placeholder="Any / not specified">

@@ -10,6 +10,7 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { Loader2, FileText, ExternalLink } from "lucide-react";
 import Link from "next/link";
 import { cn } from "@/lib/utils";
+import { useCarSelection } from "@/hooks/use-car-selection";
 
 type ManualRow = Manual & { car: Car };
 
@@ -17,6 +18,7 @@ export function ManualsView() {
   const [rows, setRows] = useState<ManualRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [persistedCarId, setPersistedCarId] = useCarSelection("");
   const [pdfUrl, setPdfUrl] = useState<string | null>(null);
   const [pdfLoading, setPdfLoading] = useState(false);
 
@@ -50,8 +52,21 @@ export function ManualsView() {
     }
     setRows(list);
     setLoading(false);
-    setSelectedId((prev) => (prev && list.some((r) => r.id === prev) ? prev : list[0]?.id ?? null));
-  }, []);
+    
+    setSelectedId((prev) => {
+      // First try to keep the same selection
+      if (prev && list.some((r) => r.id === prev)) return prev;
+      
+      // Then try to select a manual for the persisted car ID
+      if (persistedCarId) {
+        const forCar = list.find(r => r.car_id === persistedCarId);
+        if (forCar) return forCar.id;
+      }
+      
+      // Finally just pick the first one
+      return list[0]?.id ?? null;
+    });
+  }, [persistedCarId]);
 
   useEffect(() => {
     void load();
@@ -61,6 +76,12 @@ export function ManualsView() {
     () => rows.find((r) => r.id === selectedId) ?? null,
     [rows, selectedId],
   );
+
+  useEffect(() => {
+    if (selected && selected.car_id !== persistedCarId) {
+      setPersistedCarId(selected.car_id);
+    }
+  }, [selected, persistedCarId, setPersistedCarId]);
 
   useEffect(() => {
     if (!selected) {

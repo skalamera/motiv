@@ -3,9 +3,14 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
 import type { Car } from "@/types/database";
-import { ExternalLink, Loader2, RefreshCw } from "lucide-react";
+import { Loader2, RefreshCw, PlayCircle } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import {
+  Dialog,
+  DialogContent,
+  DialogTitle,
+} from "@/components/ui/dialog";
 
 type VideoResult = {
   id: string;
@@ -37,6 +42,8 @@ export function VideosView() {
   const [cursor, setCursor] = useState<string | null>(null);
   const [hasMore, setHasMore] = useState(true);
   const sentinelRef = useRef<HTMLDivElement | null>(null);
+
+  const [activeVideoId, setActiveVideoId] = useState<string | null>(null);
 
   useEffect(() => {
     const supabase = createClient();
@@ -281,20 +288,24 @@ export function VideosView() {
           <CardContent className="pt-0">
             <div className="grid gap-3 sm:grid-cols-2">
               {group.videos.map((v) => (
-                <a
+                <button
+                  type="button"
                   key={v.id}
-                  href={v.url}
-                  target="_blank"
-                  rel="noreferrer"
-                  className="group border-border/50 bg-card/60 hover:border-primary/30 hover:bg-accent/50 block overflow-hidden rounded-xl border transition-all"
+                  onClick={() => setActiveVideoId(v.id)}
+                  className="group border-border/50 bg-card/60 hover:border-primary/30 hover:bg-accent/50 block overflow-hidden rounded-xl border transition-all text-left w-full"
                 >
-                  <div className="aspect-video w-full overflow-hidden bg-black/30">
+                  <div className="relative aspect-video w-full overflow-hidden bg-black/30">
                     {/* eslint-disable-next-line @next/next/no-img-element */}
                     <img
                       src={v.thumbnail}
                       alt={v.title}
-                      className="h-full w-full object-cover transition-transform group-hover:scale-[1.02]"
+                      className="h-full w-full object-cover transition-transform group-hover:scale-[1.02] opacity-80 group-hover:opacity-100"
                     />
+                    <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+                      <div className="bg-black/50 p-3 rounded-full text-white backdrop-blur-sm transition-transform group-hover:scale-110">
+                        <PlayCircle className="size-8" />
+                      </div>
+                    </div>
                   </div>
                   <div className="space-y-1 p-3">
                     <p className="line-clamp-2 text-sm font-medium leading-snug">
@@ -302,15 +313,31 @@ export function VideosView() {
                     </p>
                     <p className="text-muted-foreground flex items-center gap-1 text-xs">
                       {v.channelTitle}
-                      <ExternalLink className="ml-auto size-3.5 opacity-50" />
                     </p>
                   </div>
-                </a>
+                </button>
               ))}
             </div>
           </CardContent>
         </Card>
       ))}
+
+      <Dialog open={!!activeVideoId} onOpenChange={(open) => !open && setActiveVideoId(null)}>
+        <DialogContent className="sm:max-w-[800px] p-0 overflow-hidden bg-black border-border/50">
+          <DialogTitle className="sr-only">Video Player</DialogTitle>
+          <div className="relative w-full aspect-video bg-black flex items-center justify-center">
+            {activeVideoId ? (
+              <iframe
+                src={`https://www.youtube.com/embed/${activeVideoId}?autoplay=1`}
+                title="YouTube video player"
+                allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+                allowFullScreen
+                className="absolute inset-0 w-full h-full border-0"
+              />
+            ) : null}
+          </div>
+        </DialogContent>
+      </Dialog>
 
       <div ref={sentinelRef} className="h-6" />
       {videosLoading && groups.length > 0 ? (

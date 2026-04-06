@@ -14,10 +14,11 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { useCarSelection } from "@/hooks/use-car-selection";
 
 export function RecallsView({ initialCarId }: { initialCarId: string | null }) {
   const [cars, setCars] = useState<Car[]>([]);
-  const [overrideTab, setOverrideTab] = useState<string | null>(null);
+  const [overrideTab, setOverrideTab] = useCarSelection("");
   const [cache, setCache] = useState<Record<string, NhtsaRecall[]>>({});
   const [lookupCache, setLookupCache] = useState<
     Record<string, RecallLookupMeta | undefined>
@@ -45,7 +46,14 @@ export function RecallsView({ initialCarId }: { initialCarId: string | null }) {
     return cars[0].id;
   }, [cars, initialCarId]);
 
-  const tab = overrideTab ?? defaultTabId;
+  const tab = overrideTab && cars.some(c => c.id === overrideTab) ? overrideTab : defaultTabId;
+
+  // Sync to local storage if not already there
+  useEffect(() => {
+    if (tab && tab !== overrideTab) {
+      setOverrideTab(tab);
+    }
+  }, [tab, overrideTab, setOverrideTab]);
 
   useEffect(() => {
     if (!tab) return;
@@ -101,7 +109,7 @@ export function RecallsView({ initialCarId }: { initialCarId: string | null }) {
   return (
     <div className="space-y-4">
       <div className="max-w-xl">
-        <Select value={tab} onValueChange={(v) => setOverrideTab(v)}>
+        <Select value={tab} onValueChange={(v) => setOverrideTab(v || "")}>
           <SelectTrigger className="w-full">
             <SelectValue placeholder="Select a vehicle">
               {(v) => {

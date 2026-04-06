@@ -1,5 +1,6 @@
 "use client";
 
+import { useEffect, useState } from "react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import {
@@ -51,6 +52,19 @@ export function AppSidebar({
 }: AppSidebarProps) {
   const pathname = usePathname();
   const router = useRouter();
+  const [hasPorsche, setHasPorsche] = useState(false);
+
+  useEffect(() => {
+    const supabase = createClient();
+    void supabase
+      .from("cars")
+      .select("make")
+      .then(({ data }) => {
+        if (data && data.some(car => car.make.toLowerCase() === "porsche")) {
+          setHasPorsche(true);
+        }
+      });
+  }, []);
 
   async function signOut() {
     const supabase = createClient();
@@ -149,6 +163,35 @@ export function AppSidebar({
               </Link>
             );
           })}
+          {hasPorsche ? (
+            <Link
+              href="/pca"
+              title={collapsed ? "PCA" : undefined}
+              onClick={() => onNavigate?.()}
+              className={cn(
+                "group relative flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium transition-all duration-200",
+                pathname === "/pca" || pathname.startsWith("/pca/")
+                  ? "bg-primary/10 text-primary shadow-sm"
+                  : "text-muted-foreground hover:bg-accent hover:text-foreground",
+                collapsed && "justify-center px-2",
+              )}
+            >
+              {pathname === "/pca" || pathname.startsWith("/pca/") ? (
+                <span className="bg-primary absolute left-0 top-1/2 h-5 w-[3px] -translate-y-1/2 rounded-r-full" />
+              ) : null}
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img
+                src="/pca.svg"
+                alt="PCA"
+                className={cn(
+                  "size-[18px] shrink-0 transition-colors opacity-70 group-hover:opacity-100",
+                  (pathname === "/pca" || pathname.startsWith("/pca/")) && "opacity-100 invert-[.4] sepia-[1] saturate-[5] hue-rotate-[190deg]",
+                  collapsed && "size-5"
+                )}
+              />
+              {!collapsed ? "PCA" : null}
+            </Link>
+          ) : null}
         </nav>
       </ScrollArea>
 
