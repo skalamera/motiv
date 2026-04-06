@@ -163,6 +163,33 @@ export function AppSidebar({
               </Link>
             );
           })}
+          <Link
+            href="/cars-and-coffee"
+            title={collapsed ? "Cars & Coffee" : undefined}
+            onClick={() => onNavigate?.()}
+            className={cn(
+              "group relative flex items-center gap-2.5 rounded-xl px-2.5 py-2.5 text-sm font-medium transition-all duration-200",
+              pathname === "/cars-and-coffee" || pathname.startsWith("/cars-and-coffee/")
+                ? "bg-primary/10 text-primary shadow-sm"
+                : "text-muted-foreground hover:bg-accent hover:text-foreground",
+              collapsed && "justify-center px-2",
+            )}
+          >
+            {pathname === "/cars-and-coffee" || pathname.startsWith("/cars-and-coffee/") ? (
+              <span className="bg-primary absolute left-0 top-1/2 h-5 w-[3px] -translate-y-1/2 rounded-r-full" />
+            ) : null}
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img
+              src="/carscoffee.svg"
+              alt="Cars & Coffee"
+              className={cn(
+                "size-[22px] shrink-0 transition-colors opacity-70 group-hover:opacity-100 dark:invert",
+                (pathname === "/cars-and-coffee" || pathname.startsWith("/cars-and-coffee/")) && "opacity-100",
+                collapsed && "size-6"
+              )}
+            />
+            {!collapsed ? "Cars & Coffee" : null}
+          </Link>
           {hasPorsche ? (
             <Link
               href="/pca"
