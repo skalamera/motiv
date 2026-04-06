@@ -53,3 +53,36 @@ export type MaintenanceLog = {
   /** Set for manual history rows (no schedule); schedule-linked rows usually use the join for task name. */
   title: string | null;
 };
+
+export type Event = {
+  id: string;
+  creator_id: string;
+  title: string;
+  start_time: string;
+  end_time: string | null;
+  location_name: string;
+  location_address: string | null;
+  state_tag: string | null;
+  event_type_tag: string | null;
+  image_url: string | null;
+  created_at: string;
+};
+
+export type Friend = {
+  id: string;
+  user_id: string;
+  friend_id: string;
+  status: "pending" | "accepted";
+  created_at: string;
+  updated_at: string;
+};
+
+export type EventInvite = {
+  id: string;
+  event_id: string;
+  inviter_id: string;
+  invitee_id: string;
+  status: "pending" | "attending" | "declined";
+  created_at: string;
+  updated_at: string;
+};

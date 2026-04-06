@@ -43,6 +43,9 @@ function extractStateSlug(address: string | null): string | null {
   return null;
 }
 
+import { CarsAndCoffeeView } from "@/components/cars-and-coffee/cars-and-coffee-view";
+import type { Profile } from "@/types/database";
+
 export default async function CarsAndCoffeePage() {
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
@@ -53,7 +56,7 @@ export default async function CarsAndCoffeePage() {
 
   const { data: profile } = await supabase
     .from("profiles")
-    .select("location_address")
+    .select("*")
     .eq("id", user.id)
     .single();
 
@@ -77,16 +80,5 @@ export default async function CarsAndCoffeePage() {
 
   const iframeUrl = `https://carsandcoffeeevents.com/${stateSlug}-car-and-bike-events/`;
 
-  return (
-    <div className="flex h-[calc(100dvh-2rem)] w-full flex-col overflow-hidden rounded-xl border border-border/50 bg-background/50">
-      <div className="flex-1 w-full bg-background relative overflow-hidden rounded-xl">
-        <iframe
-          src={iframeUrl}
-          className="absolute inset-0 w-full h-full border-0"
-          title="Cars and Coffee Events"
-          sandbox="allow-scripts allow-same-origin allow-popups allow-forms"
-        />
-      </div>
-    </div>
-  );
+  return <CarsAndCoffeeView iframeUrl={iframeUrl} stateSlug={stateSlug} currentUser={profile as Profile} />;
 }
