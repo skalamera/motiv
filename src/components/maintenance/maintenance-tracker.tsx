@@ -744,7 +744,11 @@ export function MaintenanceTracker({ initialCarId }: { initialCarId: string | nu
           </SelectTrigger>
           <SelectContent>
             {cars.map((c) => (
-              <SelectItem key={c.id} value={c.id}>
+              <SelectItem 
+                key={c.id} 
+                value={c.id}
+                label={`${c.year} ${c.make} ${c.model}`}
+              >
                 {c.year} {c.make} {c.model}
               </SelectItem>
             ))}

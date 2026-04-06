@@ -161,7 +161,11 @@ export function StatCards({ data }: { data: CarWithMeta[] }) {
                 </SelectTrigger>
                 <SelectContent>
                   {data.map((d) => (
-                    <SelectItem key={d.car.id} value={d.car.id}>
+                    <SelectItem 
+                      key={d.car.id} 
+                      value={d.car.id}
+                      label={`${d.car.year} ${d.car.make} ${d.car.model}`}
+                    >
                       {d.car.year} {d.car.make} {d.car.model}
                     </SelectItem>
                   ))}
