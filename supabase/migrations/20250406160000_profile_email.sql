@@ -6,6 +6,8 @@ set email = au.email
 from auth.users au
 where p.id = au.id;
 
+drop function if exists public.search_users_by_email(text);
+
 create or replace function public.search_users_by_email(search_email text)
 returns table(id uuid, display_name text, avatar_url text, email text)
 security definer set search_path = public
