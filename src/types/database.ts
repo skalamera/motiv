@@ -3,6 +3,7 @@ export type Profile = {
   display_name: string | null;
   avatar_url: string | null;
   location_address: string | null;
+  email: string | null;
   created_at: string;
 };
 

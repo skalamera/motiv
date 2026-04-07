@@ -206,7 +206,7 @@ export function CarsAndCoffeeView({
                     </CardContent>
                     <CardFooter className="p-4 pt-0 flex justify-between items-center bg-card/40 border-t border-border/30 mt-auto">
                       <div className="text-xs text-muted-foreground">
-                        {isCreator ? "Created by you" : `Invited by ${evt.creator?.display_name || "a friend"}`}
+                        {isCreator ? "Created by you" : `Invited by ${evt.creator?.display_name || evt.creator?.email || "a Crew Member"}`}
                       </div>
                       {!isCreator && myInvite && myInvite.status === "pending" ? (
                         <div className="flex gap-1.5">
@@ -221,7 +221,7 @@ export function CarsAndCoffeeView({
                         <div className="flex -space-x-2">
                           {evt.invites.filter((i: any) => i.status === 'attending').map((inv: any, i: number) => (
                             <div key={inv.id} className="size-6 rounded-full bg-accent border-2 border-background flex items-center justify-center text-[9px] uppercase z-10" style={{ zIndex: 10 - i }}>
-                              {inv.invitee?.display_name?.charAt(0) || '?'}
+                              {inv.invitee?.display_name?.charAt(0) || inv.invitee?.email?.charAt(0) || '?'}
                             </div>
                           ))}
                           <div className="text-[10px] text-muted-foreground pl-3">
@@ -308,9 +308,9 @@ export function CarsAndCoffeeView({
                         </div>
                         <div className="flex items-center gap-2">
                           <div className="size-6 rounded-full bg-accent flex items-center justify-center text-[10px] font-bold uppercase">
-                            {profile?.display_name?.charAt(0) || '?'}
+                            {profile?.display_name?.charAt(0) || profile?.email?.charAt(0) || '?'}
                           </div>
-                          <span className="text-sm font-medium">{profile?.display_name || "Unknown"}</span>
+                          <span className="text-sm font-medium">{profile?.display_name || profile?.email || "Someone"}</span>
                         </div>
                       </label>
                     );

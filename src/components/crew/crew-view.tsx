@@ -14,6 +14,7 @@ type SearchedUser = {
   id: string;
   display_name: string | null;
   avatar_url: string | null;
+  email: string | null;
 };
 
 type EventRow = Event & {
@@ -160,9 +161,9 @@ export function CrewView({ currentUser }: { currentUser: Profile }) {
                     <div key={u.id} className="flex items-center justify-between p-2 rounded-lg bg-background/50 border border-border/50">
                       <div className="flex items-center gap-3">
                         <div className="size-9 rounded-full bg-primary/10 text-primary flex items-center justify-center font-bold uppercase shadow-inner">
-                          {u.display_name?.charAt(0) || u.id.charAt(0)}
+                          {u.display_name?.charAt(0) || u.email?.charAt(0) || u.id.charAt(0)}
                         </div>
-                        <span className="text-sm font-medium">{u.display_name || "Unknown User"}</span>
+                        <span className="text-sm font-medium">{u.display_name || u.email || "Unknown User"}</span>
                       </div>
                       {!isSelf && !isFriend && (
                         <Button size="sm" variant="default" onClick={() => sendFriendRequest(u.id)} className="h-8 text-xs rounded-full px-4">
@@ -202,10 +203,10 @@ export function CrewView({ currentUser }: { currentUser: Profile }) {
                     <div key={f.id} className="flex items-center justify-between p-3 rounded-xl border border-border/50 hover:bg-muted/30 transition-colors">
                       <div className="flex items-center gap-3">
                         <div className="size-10 rounded-full bg-accent flex items-center justify-center font-bold text-base shadow-inner uppercase">
-                          {profile?.display_name?.charAt(0) || '?'}
+                          {profile?.display_name?.charAt(0) || profile?.email?.charAt(0) || '?'}
                         </div>
                         <div>
-                          <span className="text-sm font-semibold">{profile?.display_name || "Unknown"}</span>
+                          <span className="text-sm font-semibold">{profile?.display_name || profile?.email || "Someone"}</span>
                           <p className="text-xs text-muted-foreground mt-0.5">Crew Member</p>
                         </div>
                       </div>
@@ -247,9 +248,9 @@ export function CrewView({ currentUser }: { currentUser: Profile }) {
                       <div key={req.id} className="flex items-center justify-between p-3 rounded-xl border border-primary/20 bg-primary/5 shadow-sm">
                         <div className="flex items-center gap-3">
                           <div className="size-9 rounded-full bg-accent flex items-center justify-center font-bold uppercase shadow-inner">
-                            {req.user_profile?.display_name?.charAt(0) || '?'}
+                            {req.user_profile?.display_name?.charAt(0) || req.user_profile?.email?.charAt(0) || '?'}
                           </div>
-                          <span className="text-sm font-medium">{req.user_profile?.display_name || "Unknown"}</span>
+                          <span className="text-sm font-medium">{req.user_profile?.display_name || req.user_profile?.email || "Someone"}</span>
                         </div>
                         <div className="flex gap-2">
                           <Button size="sm" variant="default" className="h-8 rounded-full px-3 text-xs shadow-sm" onClick={() => acceptFriendRequest(req.id)}>
@@ -273,9 +274,9 @@ export function CrewView({ currentUser }: { currentUser: Profile }) {
                       <div key={req.id} className="flex items-center justify-between p-3 rounded-xl border border-border/50 bg-card">
                         <div className="flex items-center gap-3 opacity-60">
                           <div className="size-8 rounded-full bg-accent flex items-center justify-center font-bold uppercase shadow-inner">
-                            {req.friend_profile?.display_name?.charAt(0) || '?'}
+                            {req.friend_profile?.display_name?.charAt(0) || req.friend_profile?.email?.charAt(0) || '?'}
                           </div>
-                          <span className="text-sm font-medium">{req.friend_profile?.display_name || "Unknown"}</span>
+                          <span className="text-sm font-medium">{req.friend_profile?.display_name || req.friend_profile?.email || "Someone"}</span>
                         </div>
                         <Button size="sm" variant="ghost" className="h-7 text-xs text-muted-foreground hover:text-destructive hover:bg-destructive/10 rounded-full" onClick={() => declineOrRemoveFriend(req.id)}>
                           Cancel
@@ -342,7 +343,7 @@ export function CrewView({ currentUser }: { currentUser: Profile }) {
                             <span className="leading-snug">{evt.location_name}{evt.location_address ? ` · ${evt.location_address}` : ''}</span>
                           </p>
                           <p className="text-xs text-muted-foreground">
-                            Invited by <span className="font-medium text-foreground">{evt.creator?.display_name || "a Crew Member"}</span>
+                            Invited by <span className="font-medium text-foreground">{evt.creator?.display_name || evt.creator?.email || "a Crew Member"}</span>
                           </p>
                         </div>
                         <div className="flex gap-2 w-full mt-auto pt-2 border-t border-border/40">

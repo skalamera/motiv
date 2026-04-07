@@ -34,6 +34,9 @@ export function DashboardCrew() {
       .select('*, user_profile:profiles!friends_user_id_fkey(*)')
       .eq("friend_id", user.id)
       .eq("status", "pending");
+    
+    // We also need the user's profile information so we don't display "Unknown" if they haven't set their display name yet. Wait, no. The display_name is null by default on new users.
+    // If display_name is null or empty, we could show their email, but email is not in the profiles table.
     setPendingFriends(friends || []);
 
     // 2. Pending Event Invites
@@ -121,10 +124,10 @@ export function DashboardCrew() {
               <div key={f.id} className="p-4 flex items-center justify-between sm:flex-row flex-col gap-3">
                 <div className="flex items-center gap-3 self-start">
                   <div className="size-10 rounded-full bg-accent flex items-center justify-center font-bold uppercase shadow-inner text-muted-foreground">
-                    {f.user_profile?.display_name?.charAt(0) || '?'}
+                    {f.user_profile?.display_name?.charAt(0) || f.user_profile?.email?.charAt(0) || '?'}
                   </div>
                   <div>
-                    <p className="text-sm font-medium"><span className="text-foreground">{f.user_profile?.display_name || "Unknown"}</span> sent you a friend request.</p>
+                    <p className="text-sm font-medium"><span className="text-foreground">{f.user_profile?.display_name || f.user_profile?.email || "Someone"}</span> sent you a friend request.</p>
                     <p className="text-xs text-muted-foreground">Add them to your Crew to invite them to events.</p>
                   </div>
                 </div>
@@ -148,7 +151,7 @@ export function DashboardCrew() {
                       <Calendar className="size-5" />
                     </div>
                     <div>
-                      <p className="text-sm font-medium"><span className="text-foreground">{evt.creator?.display_name || "A friend"}</span> invited you to <span className="font-bold">{evt.title}</span></p>
+                      <p className="text-sm font-medium"><span className="text-foreground">{evt.creator?.display_name || evt.creator?.email || "Someone"}</span> invited you to <span className="font-bold">{evt.title}</span></p>
                       <div className="flex items-center gap-3 text-xs text-muted-foreground mt-1.5 flex-wrap">
                         <span className="flex items-center gap-1"><Clock className="size-3" /> {dateStr} @ {timeStr}</span>
                         <span className="flex items-center gap-1"><MapPin className="size-3" /> {evt.location_name}</span>
