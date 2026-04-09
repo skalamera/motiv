@@ -1,6 +1,7 @@
 import { generateObject } from "ai";
 import { z } from "zod";
 import { createClient } from "@/lib/supabase/server";
+import { currentDateForPrompt } from "@/lib/ai/current-date-for-prompt";
 import { getMotivModel } from "@/lib/ai/model";
 
 export const maxDuration = 120;
@@ -117,8 +118,8 @@ export async function POST(req: Request) {
       schema: localDrivesSchema(preview),
       system:
         preview === true
-          ? `${SYSTEM_BASE}\n\nReturn exactly one drive in the drives array.`
-          : SYSTEM_BASE,
+          ? `${currentDateForPrompt()}\n\n${SYSTEM_BASE}\n\nReturn exactly one drive in the drives array.`
+          : `${currentDateForPrompt()}\n\n${SYSTEM_BASE}`,
       prompt: userPrompt,
     });
 

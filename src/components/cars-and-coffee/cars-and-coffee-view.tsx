@@ -5,12 +5,24 @@ import { createClient } from "@/lib/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Loader2, Search, UserPlus, Check, X, MapPin, Users, Plus } from "lucide-react";
+import {
+  Loader2,
+  Search,
+  UserPlus,
+  Check,
+  X,
+  MapPin,
+  Users,
+  Plus,
+  Trash2,
+  LogOut,
+} from "lucide-react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Card, CardContent, CardFooter } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import type { Profile, Event, Friend, EventInvite } from "@/types/database";
+import { UserAvatarCircle } from "@/components/user-avatar-circle";
 
 type SearchedUser = {
   id: string;
@@ -148,9 +160,38 @@ export function CarsAndCoffeeView({
     loadEvents();
   }
 
+  async function deleteEvent(eventId: string) {
+    if (
+      !confirm(
+        "Delete this event for everyone? All invitations will be removed.",
+      )
+    ) {
+      return;
+    }
+    const { error } = await supabase.from("events").delete().eq("id", eventId);
+    if (error) {
+      alert(error.message);
+      return;
+    }
+    loadEvents();
+  }
+
+  async function leaveEvent(inviteId: string) {
+    if (!confirm("Remove yourself from this event?")) return;
+    const { error } = await supabase
+      .from("event_invites")
+      .delete()
+      .eq("id", inviteId);
+    if (error) {
+      alert(error.message);
+      return;
+    }
+    loadEvents();
+  }
+
   return (
-    <div className="flex h-[calc(100dvh-2rem)] w-full flex-col overflow-hidden space-y-4">
-      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between shrink-0">
+    <div className="flex w-full flex-col gap-4 pb-8">
+      <div className="flex shrink-0 flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <h1 className="text-2xl font-bold tracking-tight">Cars & Coffee</h1>
           <p className="text-muted-foreground text-sm mt-1">Discover local events and connect with enthusiasts.</p>
@@ -169,9 +210,11 @@ export function CarsAndCoffeeView({
         </div>
       ) : events.length > 0 ? (
         <div className="shrink-0">
-          <h2 className="text-sm font-semibold mb-3 tracking-wide uppercase text-muted-foreground">Your Network Events</h2>
-          <ScrollArea className="w-full whitespace-nowrap pb-4">
-            <div className="flex w-max space-x-4">
+          <h2 className="text-muted-foreground mb-3 text-sm font-semibold tracking-wide uppercase">
+            Your Network Events
+          </h2>
+          <ScrollArea className="h-[min(40vh,380px)] w-full whitespace-nowrap pb-2">
+            <div className="flex w-max space-x-4 pb-1">
               {events.map((evt) => {
                 const isCreator = evt.creator_id === currentUser.id;
                 const myInvite = evt.invites.find((i: any) => i.invitee_id === currentUser.id);
@@ -204,31 +247,121 @@ export function CarsAndCoffeeView({
                         <span className="leading-snug">{evt.location_name}{evt.location_address ? ` · ${evt.location_address}` : ''}</span>
                       </p>
                     </CardContent>
-                    <CardFooter className="p-4 pt-0 flex justify-between items-center bg-card/40 border-t border-border/30 mt-auto">
-                      <div className="text-xs text-muted-foreground">
-                        {isCreator ? "Created by you" : `Invited by ${evt.creator?.display_name || evt.creator?.email || "a Crew Member"}`}
-                      </div>
-                      {!isCreator && myInvite && myInvite.status === "pending" ? (
-                        <div className="flex gap-1.5">
-                          <Button size="sm" variant="default" className="h-7 text-xs px-2.5" onClick={() => rsvpEvent(myInvite.id, "attending")}>Accept</Button>
-                          <Button size="sm" variant="outline" className="h-7 text-xs px-2.5" onClick={() => rsvpEvent(myInvite.id, "declined")}>Decline</Button>
+                    <CardFooter className="border-border/30 bg-card/40 mt-auto flex flex-col gap-2 border-t p-4 pt-0">
+                      <div className="flex items-start justify-between gap-2">
+                        <div className="text-muted-foreground min-w-0 text-xs">
+                          {isCreator
+                            ? "Created by you"
+                            : `Invited by ${evt.creator?.display_name || evt.creator?.email || "a Crew Member"}`}
                         </div>
-                      ) : myInvite && myInvite.status !== "pending" ? (
-                        <Badge variant="outline" className={myInvite.status === 'attending' ? "text-emerald-500 border-emerald-500/30" : "text-muted-foreground"}>
-                          {myInvite.status === 'attending' ? 'Attending' : 'Declined'}
-                        </Badge>
-                      ) : (
-                        <div className="flex -space-x-2">
-                          {evt.invites.filter((i: any) => i.status === 'attending').map((inv: any, i: number) => (
-                            <div key={inv.id} className="size-6 rounded-full bg-accent border-2 border-background flex items-center justify-center text-[9px] uppercase z-10" style={{ zIndex: 10 - i }}>
-                              {inv.invitee?.display_name?.charAt(0) || inv.invitee?.email?.charAt(0) || '?'}
-                            </div>
-                          ))}
-                          <div className="text-[10px] text-muted-foreground pl-3">
-                            {evt.invites.filter((i: any) => i.status === 'attending').length} attending
+                        {!isCreator &&
+                        myInvite &&
+                        myInvite.status === "pending" ? (
+                          <div className="flex shrink-0 gap-1.5">
+                            <Button
+                              size="sm"
+                              variant="default"
+                              className="h-7 px-2.5 text-xs"
+                              onClick={() =>
+                                rsvpEvent(myInvite.id, "attending")
+                              }
+                            >
+                              Accept
+                            </Button>
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              className="h-7 px-2.5 text-xs"
+                              onClick={() =>
+                                rsvpEvent(myInvite.id, "declined")
+                              }
+                            >
+                              Decline
+                            </Button>
                           </div>
-                        </div>
-                      )}
+                        ) : myInvite && myInvite.status === "attending" ? (
+                          <Badge
+                            variant="outline"
+                            className="border-emerald-500/30 shrink-0 text-emerald-500"
+                          >
+                            Attending
+                          </Badge>
+                        ) : myInvite && myInvite.status === "declined" ? (
+                          <Badge
+                            variant="outline"
+                            className="text-muted-foreground shrink-0"
+                          >
+                            Declined
+                          </Badge>
+                        ) : isCreator ? (
+                          <div className="flex max-w-[55%] flex-wrap items-center justify-end gap-1">
+                            {evt.invites
+                              .filter((i: { status: string }) => i.status === "attending")
+                              .map(
+                                (
+                                  inv: {
+                                    id: string;
+                                    invitee?: {
+                                      display_name?: string | null;
+                                      email?: string | null;
+                                      avatar_url?: string | null;
+                                    };
+                                  },
+                                  i: number,
+                                ) => (
+                                  <div
+                                    key={inv.id}
+                                    className="border-background"
+                                    style={{ zIndex: 10 - i }}
+                                  >
+                                    <UserAvatarCircle
+                                      avatarUrl={inv.invitee?.avatar_url}
+                                      displayName={inv.invitee?.display_name}
+                                      email={inv.invitee?.email}
+                                      className="size-6 border-2 border-background"
+                                      fallbackClassName="bg-accent text-[9px]"
+                                    />
+                                  </div>
+                                ),
+                              )}
+                            <span className="text-muted-foreground pl-1 text-[10px]">
+                              {
+                                evt.invites.filter(
+                                  (i: { status: string }) =>
+                                    i.status === "attending",
+                                ).length
+                              }{" "}
+                              attending
+                            </span>
+                          </div>
+                        ) : null}
+                      </div>
+                      <div className="flex flex-wrap gap-2">
+                        {isCreator ? (
+                          <Button
+                            size="sm"
+                            variant="destructive"
+                            className="h-7 text-xs"
+                            onClick={() => void deleteEvent(evt.id)}
+                          >
+                            <Trash2 className="mr-1 size-3" />
+                            Delete event
+                          </Button>
+                        ) : null}
+                        {!isCreator &&
+                        myInvite &&
+                        myInvite.status === "attending" ? (
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            className="h-7 text-xs"
+                            onClick={() => void leaveEvent(myInvite.id)}
+                          >
+                            <LogOut className="mr-1 size-3" />
+                            Leave event
+                          </Button>
+                        ) : null}
+                      </div>
                     </CardFooter>
                   </Card>
                 );
@@ -238,10 +371,13 @@ export function CarsAndCoffeeView({
         </div>
       ) : null}
 
-      <div className="flex-1 w-full bg-background relative overflow-hidden rounded-xl border border-border/50">
+      {/* Tall iframe: avoid flex-1 in a fixed-height column (it shrinks when events render above). */}
+      <div
+        className="border-border/50 relative w-full overflow-hidden rounded-xl border bg-background min-h-[28rem] h-[68dvh] sm:min-h-[32rem] sm:h-[72dvh]"
+      >
         <iframe
           src={iframeUrl}
-          className="absolute inset-0 w-full h-full border-0"
+          className="absolute inset-0 h-full w-full border-0"
           title="Cars and Coffee Events"
           sandbox="allow-scripts allow-same-origin allow-popups allow-forms"
         />
@@ -307,9 +443,13 @@ export function CarsAndCoffeeView({
                           </div>
                         </div>
                         <div className="flex items-center gap-2">
-                          <div className="size-6 rounded-full bg-accent flex items-center justify-center text-[10px] font-bold uppercase">
-                            {profile?.display_name?.charAt(0) || profile?.email?.charAt(0) || '?'}
-                          </div>
+                          <UserAvatarCircle
+                            avatarUrl={profile?.avatar_url}
+                            displayName={profile?.display_name}
+                            email={profile?.email}
+                            className="size-6"
+                            fallbackClassName="bg-accent text-[10px]"
+                          />
                           <span className="text-sm font-medium">{profile?.display_name || profile?.email || "Someone"}</span>
                         </div>
                       </label>

@@ -1,5 +1,5 @@
-import { SettingsView } from "@/components/settings/settings-view";
+import { AccountSettingsView } from "@/components/settings/account-settings-view";
 
 export default function SettingsPage() {
-  return <SettingsView />;
+  return <AccountSettingsView />;
 }

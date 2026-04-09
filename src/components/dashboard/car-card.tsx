@@ -8,46 +8,25 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { buttonVariants } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { Badge } from "@/components/ui/badge";
-
-function nextMaintenanceSummary(
-  car: Car,
-  schedules: MaintenanceSchedule[],
-): string {
-  if (schedules.length === 0) return "No schedule yet — generate or add items.";
-  const withMiles = schedules
-    .filter((s) => s.interval_miles && s.last_mileage_at != null)
-    .map((s) => ({
-      task: s.task,
-      dueAt: (s.last_mileage_at ?? 0) + (s.interval_miles ?? 0),
-    }))
-    .filter((x) => x.dueAt > car.mileage)
-    .sort((a, b) => a.dueAt - b.dueAt)[0];
-
-  if (withMiles) {
-    const remaining = withMiles.dueAt - car.mileage;
-    return `${withMiles.task} in ~${remaining.toLocaleString()} mi`;
-  }
-
-  const byMonth = schedules.find((s) => s.interval_months);
-  if (byMonth) {
-    return `${byMonth.task} (every ${byMonth.interval_months} mo)`;
-  }
-
-  return schedules[0]?.task ?? "Review maintenance list";
-}
+import {
+  computeSuggestedNextMaintenance,
+  type MaintenanceLogForSuggestion,
+} from "@/lib/maintenance/suggested-next";
 
 export function CarCard({
   car,
   schedules,
+  logs,
   recallCount,
   index,
 }: {
   car: Car;
   schedules: MaintenanceSchedule[];
+  logs: MaintenanceLogForSuggestion[];
   recallCount: number;
   index: number;
 }) {
-  const nextLine = nextMaintenanceSummary(car, schedules);
+  const suggested = computeSuggestedNextMaintenance(car, schedules, logs);
 
   return (
     <motion.div
@@ -56,6 +35,16 @@ export function CarCard({
       transition={{ delay: index * 0.06 }}
     >
       <Card className="gradient-border group overflow-hidden border border-border/50 bg-card/50 backdrop-blur-sm transition-all duration-300 hover:shadow-xl hover:shadow-primary/5">
+        {car.image_url ? (
+          <div className="bg-muted/40 relative aspect-[16/9] w-full overflow-hidden border-b border-border/40">
+            {/* eslint-disable-next-line @next/next/no-img-element -- public garage photo URL */}
+            <img
+              src={car.image_url}
+              alt={`${car.year} ${car.make} ${car.model}`}
+              className="h-full w-full object-cover transition-transform duration-500 group-hover:scale-[1.02]"
+            />
+          </div>
+        ) : null}
         <CardHeader className="flex flex-row items-start justify-between gap-2 pb-2">
           <div>
             <CardTitle className="text-lg font-semibold tracking-tight">
@@ -68,6 +57,21 @@ export function CarCard({
               ) : null}
             </CardTitle>
             <div className="text-muted-foreground mt-1.5 flex flex-wrap items-center gap-2 text-xs">
+              {car.color ? (
+                <span className="inline-flex items-center gap-1 rounded-full bg-muted/60 px-2 py-0.5">
+                  {car.color}
+                </span>
+              ) : null}
+              {car.body_type ? (
+                <span className="inline-flex items-center gap-1 rounded-full bg-muted/60 px-2 py-0.5">
+                  {car.body_type}
+                </span>
+              ) : null}
+              {car.drivetrain ? (
+                <span className="inline-flex items-center gap-1 rounded-full bg-muted/60 px-2 py-0.5">
+                  {car.drivetrain}
+                </span>
+              ) : null}
               <span className="inline-flex items-center gap-1 rounded-full bg-muted/60 px-2 py-0.5">
                 <Gauge className="size-3.5" />
                 {car.mileage.toLocaleString()} mi
@@ -96,15 +100,21 @@ export function CarCard({
           </Link>
         </CardHeader>
         <CardContent className="space-y-3">
-          <div className="flex items-start gap-2 rounded-xl border border-border/50 bg-accent/50 p-3 text-sm">
-            <CalendarClock className="text-primary mt-0.5 size-4 shrink-0" />
-            <div>
-              <p className="text-muted-foreground text-xs font-medium tracking-wide uppercase">
-                Next focus
-              </p>
-              <p className="mt-0.5">{nextLine}</p>
+          {suggested.hasRankedNext ? (
+            <div className="flex items-start gap-2 rounded-xl border border-border/50 bg-accent/50 p-3 text-sm">
+              <CalendarClock className="text-primary mt-0.5 size-4 shrink-0" />
+              <div>
+                <p className="text-muted-foreground text-xs font-medium tracking-wide uppercase">
+                  Suggested next maintenance
+                </p>
+                <p className="text-muted-foreground mt-0.5 text-[0.65rem] leading-snug">
+                  Same computation as the Maintenance page — from your schedule,
+                  odometer, and service history only (not AI).
+                </p>
+                <p className="mt-1 font-medium">{suggested.line}</p>
+              </div>
             </div>
-          </div>
+          ) : null}
           <div className="flex flex-wrap gap-2">
             <Link
               href={`/chat?car=${car.id}`}

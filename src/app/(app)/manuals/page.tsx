@@ -4,9 +4,10 @@ export default function ManualsPage() {
   return (
     <div className="mx-auto max-w-6xl space-y-4">
       <div>
-        <h1 className="text-2xl font-bold tracking-tight">User manuals</h1>
+        <h1 className="text-2xl font-bold tracking-tight">Library</h1>
         <p className="text-muted-foreground text-sm">
-          Read your uploaded PDFs here and ask Motiv questions about them.
+          Owner&apos;s manual, maintenance/service references, and other files per
+          vehicle. Ask Motiv about owner&apos;s manuals from here.
         </p>
       </div>
       <ManualsView />

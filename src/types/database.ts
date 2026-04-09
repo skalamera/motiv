@@ -14,18 +14,29 @@ export type Car = {
   make: string;
   model: string;
   trim: string | null;
+  /** Exterior color (user-entered; used for display and AI hero image). */
+  color: string | null;
+  /** Body style label from fixed list (optional). */
+  body_type: string | null;
+  /** Drivetrain label from fixed list (optional). */
+  drivetrain: string | null;
   vin: string | null;
   mileage: number;
   image_url: string | null;
+  /** Exact `Car_Libraries/<name>/` folder name after running the indexer script. */
+  car_library_key: string | null;
   created_at: string;
   updated_at: string;
 };
+
+export type ManualKind = "owner" | "maintenance" | "other";
 
 export type Manual = {
   id: string;
   car_id: string;
   storage_path: string;
   file_name: string;
+  manual_kind: ManualKind;
   created_at: string;
 };
 
@@ -36,7 +47,7 @@ export type MaintenanceSchedule = {
   interval_miles: number | null;
   interval_months: number | null;
   is_custom: boolean;
-  source: "manual" | "web" | "custom";
+  source: "manual" | "web" | "custom" | "user_provided";
   notes: string | null;
   last_completed_at: string | null;
   last_mileage_at: number | null;
@@ -53,6 +64,19 @@ export type MaintenanceLog = {
   cost: number | null;
   /** Set for manual history rows (no schedule); schedule-linked rows usually use the join for task name. */
   title: string | null;
+};
+
+export type MaintenanceSuggestion = {
+  id: string;
+  car_id: string;
+  headline: string;
+  primary_service: string;
+  rationale: string | null;
+  urgency: "routine" | "soon" | "due_now";
+  estimated_miles_remaining: number | null;
+  related_schedule_task: string | null;
+  caveats: string | null;
+  created_at: string;
 };
 
 export type Event = {

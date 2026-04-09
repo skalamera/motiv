@@ -10,33 +10,31 @@ import {
   Gauge,
   AlertTriangle,
   Newspaper,
+  Rss,
   Video,
   MapPin,
-  BookOpen,
-  Settings,
+  Library,
   LogOut,
   PanelLeftClose,
   PanelLeft,
-  Users,
+  ChevronDown,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { Separator } from "@/components/ui/separator";
 import { createClient } from "@/lib/supabase/client";
+import { AppAccountNav } from "@/components/app-account-nav";
 
 const nav = [
   { href: "/", label: "Dashboard", icon: LayoutDashboard },
   { href: "/chat", label: "Ask Motiv", icon: MessageSquare },
   { href: "/maintenance", label: "Maintenance", icon: Wrench },
   { href: "/upgrades", label: "Upgrades", icon: Gauge },
-  { href: "/manuals", label: "User manuals", icon: BookOpen },
+  { href: "/manuals", label: "Library", icon: Library },
   { href: "/recalls", label: "Recalls", icon: AlertTriangle },
   { href: "/news", label: "News", icon: Newspaper },
   { href: "/videos", label: "Videos", icon: Video },
   { href: "/local-drives", label: "Local Drives", icon: MapPin },
-  { href: "/crew", label: "Crew", icon: Users },
-  { href: "/settings", label: "Settings", icon: Settings },
 ];
 
 type AppSidebarProps = {
@@ -55,8 +53,7 @@ export function AppSidebar({
   const pathname = usePathname();
   const router = useRouter();
   const [hasPorsche, setHasPorsche] = useState(false);
-  const [pendingInvitesCount, setPendingInvitesCount] = useState(0);
-
+  const [porscheExclusivesOpen, setPorscheExclusivesOpen] = useState(true);
   useEffect(() => {
     const supabase = createClient();
     void supabase
@@ -67,21 +64,18 @@ export function AppSidebar({
           setHasPorsche(true);
         }
       });
-      
-    // Fetch pending friend requests and event invites
-    void supabase.auth.getUser().then(({ data: { user } }) => {
-      if (user) {
-        Promise.all([
-          supabase.from("friends").select("*", { count: "exact", head: true }).eq("friend_id", user.id).eq("status", "pending"),
-          supabase.from("event_invites").select("*", { count: "exact", head: true }).eq("invitee_id", user.id).eq("status", "pending")
-        ]).then(([friendsRes, invitesRes]) => {
-          const friendCount = friendsRes.count || 0;
-          const inviteCount = invitesRes.count || 0;
-          setPendingInvitesCount(friendCount + inviteCount);
-        });
-      }
-    });
   }, []);
+
+  useEffect(() => {
+    if (
+      pathname === "/pca" ||
+      pathname.startsWith("/pca/") ||
+      pathname === "/rennlist-today" ||
+      pathname.startsWith("/rennlist-today/")
+    ) {
+      setPorscheExclusivesOpen(true);
+    }
+  }, [pathname]);
 
   async function signOut() {
     const supabase = createClient();
@@ -97,58 +91,13 @@ export function AppSidebar({
         collapsed ? "w-[72px]" : "w-60",
       )}
     >
-      <div className="flex h-14 items-center gap-2 px-3">
-        {collapsed ? (
-          <Link href="/" className="flex flex-1 justify-center">
-            {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img
-              src="/logo_border_no_text.svg"
-              alt="Motiv"
-              width={40}
-              height={40}
-              className="h-9 w-9 shrink-0 object-contain dark:hidden"
-            />
-            {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img
-              src="/motiv_dark_notext.svg"
-              alt="Motiv"
-              width={40}
-              height={40}
-              className="hidden h-9 w-9 shrink-0 object-contain dark:block"
-            />
-          </Link>
-        ) : (
-          <Link href="/" className="flex flex-1 items-center justify-center py-2">
-            {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img
-              src="/logo_border_no_text.svg"
-              alt="Motiv"
-              width={40}
-              height={40}
-              className="h-10 w-10 shrink-0 object-contain dark:hidden"
-            />
-            {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img
-              src="/motiv_dark_notext.svg"
-              alt="Motiv"
-              width={40}
-              height={40}
-              className="hidden h-10 w-10 shrink-0 object-contain dark:block"
-            />
-          </Link>
-        )}
-        {showCollapseToggle ? (
-          <Button
-            variant="ghost"
-            size="icon"
-            className="shrink-0 text-muted-foreground hover:text-foreground"
-            onClick={onToggleCollapse}
-            title={collapsed ? "Expand sidebar" : "Collapse sidebar"}
-            aria-label={collapsed ? "Expand sidebar" : "Collapse sidebar"}
-          >
-            {collapsed ? <PanelLeft className="size-4" /> : <PanelLeftClose className="size-4" />}
-          </Button>
-        ) : null}
+      <div className="border-sidebar-border/50 shrink-0 border-b">
+        <div className={cn("px-2 py-2", collapsed && "px-1.5")}>
+          <AppAccountNav
+            collapsed={collapsed}
+            onItemClick={onNavigate}
+          />
+        </div>
       </div>
 
       <ScrollArea className="flex-1 py-2">
@@ -179,16 +128,6 @@ export function AppSidebar({
                 <span className="flex-1 text-left">
                   {!collapsed ? label : null}
                 </span>
-                {!collapsed && label === "Crew" && pendingInvitesCount > 0 ? (
-                  <span className="bg-primary flex size-4 items-center justify-center rounded-full text-[9px] font-bold text-primary-foreground">
-                    {pendingInvitesCount}
-                  </span>
-                ) : null}
-                {collapsed && label === "Crew" && pendingInvitesCount > 0 ? (
-                  <span className="absolute -top-1 -right-1 flex size-3.5 items-center justify-center rounded-full bg-primary text-[8px] font-bold text-primary-foreground border-2 border-background">
-                    {pendingInvitesCount}
-                  </span>
-                ) : null}
               </Link>
             );
           })}
@@ -220,36 +159,160 @@ export function AppSidebar({
             {!collapsed ? "Cars & Coffee" : null}
           </Link>
           {hasPorsche ? (
-            <Link
-              href="/pca"
-              title={collapsed ? "PCA" : undefined}
-              onClick={() => onNavigate?.()}
-              className={cn(
-                "group relative flex items-center gap-2.5 rounded-xl px-2.5 py-2.5 text-sm font-medium transition-all duration-200",
-                pathname === "/pca" || pathname.startsWith("/pca/")
-                  ? "bg-primary/10 text-primary shadow-sm"
-                  : "text-muted-foreground hover:bg-accent hover:text-foreground",
-                collapsed && "justify-center px-2",
-              )}
-            >
-              {pathname === "/pca" || pathname.startsWith("/pca/") ? (
-                <span className="bg-primary absolute left-0 top-1/2 h-5 w-[3px] -translate-y-1/2 rounded-r-full" />
-              ) : null}
-              {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img
-                src="/pca.svg"
-                alt="PCA"
-                className={cn(
-                  "size-[22px] shrink-0 transition-colors opacity-70 group-hover:opacity-100",
-                  (pathname === "/pca" || pathname.startsWith("/pca/")) && "opacity-100 invert-[.4] sepia-[1] saturate-[5] hue-rotate-[190deg]",
-                  collapsed && "size-6"
-                )}
-              />
-              {!collapsed ? "PCA" : null}
-            </Link>
+            collapsed ? (
+              <>
+                <Link
+                  href="/pca"
+                  title="PCA"
+                  onClick={() => onNavigate?.()}
+                  className={cn(
+                    "group relative flex items-center justify-center gap-2.5 rounded-xl px-2 py-2.5 text-sm font-medium transition-all duration-200",
+                    pathname === "/pca" || pathname.startsWith("/pca/")
+                      ? "bg-primary/10 text-primary shadow-sm"
+                      : "text-muted-foreground hover:bg-accent hover:text-foreground",
+                  )}
+                >
+                  {pathname === "/pca" || pathname.startsWith("/pca/") ? (
+                    <span className="bg-primary absolute left-0 top-1/2 h-5 w-[3px] -translate-y-1/2 rounded-r-full" />
+                  ) : null}
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img
+                    src="/pca.svg"
+                    alt=""
+                    className={cn(
+                      "size-6 shrink-0 transition-colors opacity-70 group-hover:opacity-100",
+                      (pathname === "/pca" || pathname.startsWith("/pca/")) &&
+                        "opacity-100 invert-[.4] sepia-[1] saturate-[5] hue-rotate-[190deg]",
+                    )}
+                  />
+                </Link>
+                <Link
+                  href="/rennlist-today"
+                  title="Rennlist today"
+                  onClick={() => onNavigate?.()}
+                  className={cn(
+                    "group relative flex items-center justify-center gap-3 rounded-xl px-2 py-2.5 text-sm font-medium transition-all duration-200",
+                    pathname === "/rennlist-today" ||
+                      pathname.startsWith("/rennlist-today/")
+                      ? "bg-primary/10 text-primary shadow-sm"
+                      : "text-muted-foreground hover:bg-accent hover:text-foreground",
+                  )}
+                >
+                  {pathname === "/rennlist-today" ||
+                  pathname.startsWith("/rennlist-today/") ? (
+                    <span className="bg-primary absolute left-0 top-1/2 h-5 w-[3px] -translate-y-1/2 rounded-r-full" />
+                  ) : null}
+                  <Rss
+                    className={cn(
+                      "size-[18px] shrink-0 transition-colors",
+                      (pathname === "/rennlist-today" ||
+                        pathname.startsWith("/rennlist-today/")) &&
+                        "text-primary",
+                    )}
+                  />
+                </Link>
+              </>
+            ) : (
+              <div className="flex flex-col gap-0.5">
+                <button
+                  type="button"
+                  onClick={() => setPorscheExclusivesOpen((o) => !o)}
+                  className="text-muted-foreground hover:bg-accent hover:text-foreground flex w-full items-center gap-2 rounded-xl px-3 py-2 text-left text-xs font-semibold tracking-wide uppercase transition-colors"
+                  aria-expanded={porscheExclusivesOpen}
+                >
+                  <ChevronDown
+                    className={cn(
+                      "size-4 shrink-0 transition-transform duration-200",
+                      !porscheExclusivesOpen && "-rotate-90",
+                    )}
+                    aria-hidden
+                  />
+                  <span className="leading-tight">Porsche Owner Exclusives</span>
+                </button>
+                {porscheExclusivesOpen ? (
+                  <div className="border-border/40 ml-2 flex flex-col gap-1 border-l pl-2">
+                    <Link
+                      href="/pca"
+                      onClick={() => onNavigate?.()}
+                      className={cn(
+                        "group relative flex items-center gap-2.5 rounded-xl px-2.5 py-2 text-sm font-medium transition-all duration-200",
+                        pathname === "/pca" || pathname.startsWith("/pca/")
+                          ? "bg-primary/10 text-primary shadow-sm"
+                          : "text-muted-foreground hover:bg-accent hover:text-foreground",
+                      )}
+                    >
+                      {pathname === "/pca" || pathname.startsWith("/pca/") ? (
+                        <span className="bg-primary absolute left-0 top-1/2 h-5 w-[3px] -translate-y-1/2 rounded-r-full" />
+                      ) : null}
+                      {/* eslint-disable-next-line @next/next/no-img-element */}
+                      <img
+                        src="/pca.svg"
+                        alt=""
+                        className={cn(
+                          "size-[22px] shrink-0 transition-colors opacity-70 group-hover:opacity-100",
+                          (pathname === "/pca" ||
+                            pathname.startsWith("/pca/")) &&
+                            "opacity-100 invert-[.4] sepia-[1] saturate-[5] hue-rotate-[190deg]",
+                        )}
+                      />
+                      <span className="flex-1 text-left">PCA</span>
+                    </Link>
+                    <Link
+                      href="/rennlist-today"
+                      onClick={() => onNavigate?.()}
+                      className={cn(
+                        "group relative flex items-center gap-2.5 rounded-xl px-2.5 py-2 text-sm font-medium transition-all duration-200",
+                        pathname === "/rennlist-today" ||
+                          pathname.startsWith("/rennlist-today/")
+                          ? "bg-primary/10 text-primary shadow-sm"
+                          : "text-muted-foreground hover:bg-accent hover:text-foreground",
+                      )}
+                    >
+                      {pathname === "/rennlist-today" ||
+                      pathname.startsWith("/rennlist-today/") ? (
+                        <span className="bg-primary absolute left-0 top-1/2 h-5 w-[3px] -translate-y-1/2 rounded-r-full" />
+                      ) : null}
+                      <Rss
+                        className={cn(
+                          "size-[18px] shrink-0 transition-colors",
+                          (pathname === "/rennlist-today" ||
+                            pathname.startsWith("/rennlist-today/")) &&
+                            "text-primary",
+                        )}
+                      />
+                      <span className="flex-1 text-left">Rennlist today</span>
+                    </Link>
+                  </div>
+                ) : null}
+              </div>
+            )
           ) : null}
         </nav>
       </ScrollArea>
+
+      {showCollapseToggle ? (
+        <div
+          className={cn(
+            "border-sidebar-border/50 hidden shrink-0 border-t px-2 py-2 md:flex",
+            collapsed ? "justify-center" : "justify-end",
+          )}
+        >
+          <Button
+            variant="ghost"
+            size="icon"
+            className="shrink-0 text-muted-foreground hover:text-foreground"
+            onClick={onToggleCollapse}
+            title={collapsed ? "Expand sidebar" : "Collapse sidebar"}
+            aria-label={collapsed ? "Expand sidebar" : "Collapse sidebar"}
+          >
+            {collapsed ? (
+              <PanelLeft className="size-4" />
+            ) : (
+              <PanelLeftClose className="size-4" />
+            )}
+          </Button>
+        </div>
+      ) : null}
 
       <div className="border-t border-sidebar-border/50 p-2">
         <Button

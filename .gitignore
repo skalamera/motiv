@@ -24,6 +24,12 @@
 .DS_Store
 *.pem
 
+# Local reference photos / extractions (not part of the app)
+images_to_pdf/
+
+# Large local-only asset libraries
+Car_Libraries/
+
 # debug
 npm-debug.log*
 yarn-debug.log*

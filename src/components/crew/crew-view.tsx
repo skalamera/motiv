@@ -5,10 +5,11 @@ import { createClient } from "@/lib/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Loader2, Search, UserPlus, Check, X, MapPin, Users, Calendar } from "lucide-react";
+import { Loader2, Search, UserPlus, Check, X, MapPin, Users, Calendar, LogOut } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle, CardFooter } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import type { Profile, Event, Friend, EventInvite } from "@/types/database";
+import { UserAvatarCircle } from "@/components/user-avatar-circle";
 
 type SearchedUser = {
   id: string;
@@ -34,12 +35,17 @@ export function CrewView({ currentUser }: { currentUser: Profile }) {
   // Event Invites State
   const [eventInvites, setEventInvites] = useState<(EventInvite & { event: Event & { creator: Profile } })[]>([]);
   const [invitesLoading, setInvitesLoading] = useState(true);
+  const [attendingEvents, setAttendingEvents] = useState<
+    (EventInvite & { event: Event & { creator: Profile } })[]
+  >([]);
+  const [attendingLoading, setAttendingLoading] = useState(true);
 
   const supabase = createClient();
 
   useEffect(() => {
     loadFriends();
     loadEventInvites();
+    loadAttendingEvents();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -67,6 +73,26 @@ export function CrewView({ currentUser }: { currentUser: Profile }) {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     setEventInvites((invs || []) as any);
     setInvitesLoading(false);
+  }
+
+  async function loadAttendingEvents() {
+    setAttendingLoading(true);
+    const { data } = await supabase
+      .from("event_invites")
+      .select(
+        "*, event:events!inner(*, creator:profiles!events_creator_id_fkey(*))",
+      )
+      .eq("invitee_id", currentUser.id)
+      .eq("status", "attending")
+      .order("created_at", { ascending: false });
+    const now = new Date();
+    const upcoming = (data || []).filter(
+      (row: { event: { start_time: string } }) =>
+        new Date(row.event.start_time) >= now,
+    );
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    setAttendingEvents(upcoming as any);
+    setAttendingLoading(false);
   }
 
   async function searchFriends(e: React.FormEvent) {
@@ -102,6 +128,20 @@ export function CrewView({ currentUser }: { currentUser: Profile }) {
   async function rsvpEvent(inviteId: string, status: "attending" | "declined") {
     await supabase.from("event_invites").update({ status }).eq("id", inviteId);
     loadEventInvites();
+    loadAttendingEvents();
+  }
+
+  async function leaveAttendingEvent(inviteId: string) {
+    if (!confirm("Remove yourself from this event?")) return;
+    const { error } = await supabase
+      .from("event_invites")
+      .delete()
+      .eq("id", inviteId);
+    if (error) {
+      alert(error.message);
+      return;
+    }
+    loadAttendingEvents();
   }
 
   // Requests where I am the friend_id (received requests)
@@ -160,9 +200,14 @@ export function CrewView({ currentUser }: { currentUser: Profile }) {
                   return (
                     <div key={u.id} className="flex items-center justify-between p-2 rounded-lg bg-background/50 border border-border/50">
                       <div className="flex items-center gap-3">
-                        <div className="size-9 rounded-full bg-primary/10 text-primary flex items-center justify-center font-bold uppercase shadow-inner">
-                          {u.display_name?.charAt(0) || u.email?.charAt(0) || u.id.charAt(0)}
-                        </div>
+                        <UserAvatarCircle
+                          avatarUrl={u.avatar_url}
+                          displayName={u.display_name}
+                          email={u.email}
+                          fallbackKey={u.id}
+                          className="size-9"
+                          fallbackClassName="bg-primary/10 text-primary"
+                        />
                         <span className="text-sm font-medium">{u.display_name || u.email || "Unknown User"}</span>
                       </div>
                       {!isSelf && !isFriend && (
@@ -202,9 +247,13 @@ export function CrewView({ currentUser }: { currentUser: Profile }) {
                   return (
                     <div key={f.id} className="flex items-center justify-between p-3 rounded-xl border border-border/50 hover:bg-muted/30 transition-colors">
                       <div className="flex items-center gap-3">
-                        <div className="size-10 rounded-full bg-accent flex items-center justify-center font-bold text-base shadow-inner uppercase">
-                          {profile?.display_name?.charAt(0) || profile?.email?.charAt(0) || '?'}
-                        </div>
+                        <UserAvatarCircle
+                          avatarUrl={profile?.avatar_url}
+                          displayName={profile?.display_name}
+                          email={profile?.email}
+                          className="size-10"
+                          fallbackClassName="bg-accent text-base"
+                        />
                         <div>
                           <span className="text-sm font-semibold">{profile?.display_name || profile?.email || "Someone"}</span>
                           <p className="text-xs text-muted-foreground mt-0.5">Crew Member</p>
@@ -247,9 +296,13 @@ export function CrewView({ currentUser }: { currentUser: Profile }) {
                     {receivedRequests.map(req => (
                       <div key={req.id} className="flex items-center justify-between p-3 rounded-xl border border-primary/20 bg-primary/5 shadow-sm">
                         <div className="flex items-center gap-3">
-                          <div className="size-9 rounded-full bg-accent flex items-center justify-center font-bold uppercase shadow-inner">
-                            {req.user_profile?.display_name?.charAt(0) || req.user_profile?.email?.charAt(0) || '?'}
-                          </div>
+                          <UserAvatarCircle
+                            avatarUrl={req.user_profile?.avatar_url}
+                            displayName={req.user_profile?.display_name}
+                            email={req.user_profile?.email}
+                            className="size-9"
+                            fallbackClassName="bg-accent"
+                          />
                           <span className="text-sm font-medium">{req.user_profile?.display_name || req.user_profile?.email || "Someone"}</span>
                         </div>
                         <div className="flex gap-2">
@@ -273,9 +326,13 @@ export function CrewView({ currentUser }: { currentUser: Profile }) {
                     {sentRequests.map(req => (
                       <div key={req.id} className="flex items-center justify-between p-3 rounded-xl border border-border/50 bg-card">
                         <div className="flex items-center gap-3 opacity-60">
-                          <div className="size-8 rounded-full bg-accent flex items-center justify-center font-bold uppercase shadow-inner">
-                            {req.friend_profile?.display_name?.charAt(0) || req.friend_profile?.email?.charAt(0) || '?'}
-                          </div>
+                          <UserAvatarCircle
+                            avatarUrl={req.friend_profile?.avatar_url}
+                            displayName={req.friend_profile?.display_name}
+                            email={req.friend_profile?.email}
+                            className="size-8"
+                            fallbackClassName="bg-accent"
+                          />
                           <span className="text-sm font-medium">{req.friend_profile?.display_name || req.friend_profile?.email || "Someone"}</span>
                         </div>
                         <Button size="sm" variant="ghost" className="h-7 text-xs text-muted-foreground hover:text-destructive hover:bg-destructive/10 rounded-full" onClick={() => declineOrRemoveFriend(req.id)}>
@@ -355,6 +412,77 @@ export function CrewView({ currentUser }: { currentUser: Profile }) {
                           </Button>
                         </div>
                       </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </CardContent>
+        </Card>
+
+        <Card className="border-border/50 bg-card/60 backdrop-blur-sm">
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <Calendar className="size-5" />
+              Events you&apos;re attending
+            </CardTitle>
+            <p className="text-muted-foreground text-xs">
+              Leave anytime — your invitation is removed but the event stays for
+              others.
+            </p>
+          </CardHeader>
+          <CardContent>
+            {attendingLoading ? (
+              <div className="text-muted-foreground flex items-center gap-2 text-sm">
+                <Loader2 className="size-4 animate-spin" /> Loading…
+              </div>
+            ) : attendingEvents.length === 0 ? (
+              <p className="text-muted-foreground text-sm">
+                No upcoming events you&apos;ve accepted.
+              </p>
+            ) : (
+              <div className="space-y-3">
+                {attendingEvents.map((inv) => {
+                  const evt = inv.event;
+                  const dt = new Date(evt.start_time);
+                  const dateStr = dt.toLocaleDateString(undefined, {
+                    weekday: "short",
+                    month: "short",
+                    day: "numeric",
+                  });
+                  const timeStr = dt.toLocaleTimeString(undefined, {
+                    hour: "numeric",
+                    minute: "2-digit",
+                  });
+                  return (
+                    <div
+                      key={inv.id}
+                      className="flex flex-col gap-2 rounded-xl border border-border/50 bg-card/40 p-3 sm:flex-row sm:items-center sm:justify-between"
+                    >
+                      <div className="min-w-0">
+                        <p className="text-primary text-xs font-semibold uppercase tracking-wide">
+                          {dateStr} @ {timeStr}
+                        </p>
+                        <p className="font-medium">{evt.title}</p>
+                        <p className="text-muted-foreground mt-0.5 flex items-start gap-1 text-xs">
+                          <MapPin className="mt-0.5 size-3 shrink-0" />
+                          <span>
+                            {evt.location_name}
+                            {evt.location_address
+                              ? ` · ${evt.location_address}`
+                              : ""}
+                          </span>
+                        </p>
+                      </div>
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        className="shrink-0"
+                        onClick={() => void leaveAttendingEvent(inv.id)}
+                      >
+                        <LogOut className="mr-1.5 size-3.5" />
+                        Leave event
+                      </Button>
                     </div>
                   );
                 })}

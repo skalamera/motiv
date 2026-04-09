@@ -80,7 +80,7 @@ export function StatCards({ data }: { data: CarWithMeta[] }) {
       icon: CarIcon,
       color: "text-primary",
       bg: "bg-primary/10",
-      href: "/settings#my-garage",
+      href: "/garage",
     },
     {
       label: "Total miles",

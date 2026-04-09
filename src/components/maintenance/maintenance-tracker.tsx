@@ -1,8 +1,12 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
-import type { Car, MaintenanceSchedule } from "@/types/database";
+import type {
+  Car,
+  MaintenanceSchedule,
+  MaintenanceSuggestion,
+} from "@/types/database";
 import {
   Select,
   SelectContent,
@@ -30,8 +34,18 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { Loader2, Plus, Sparkles, Trash2 } from "lucide-react";
+import {
+  Camera,
+  Check,
+  Loader2,
+  Plus,
+  ScanLine,
+  Sparkles,
+  Trash2,
+  Upload,
+} from "lucide-react";
 import { useCarSelection } from "@/hooks/use-car-selection";
+import { computeSuggestedNextMaintenance } from "@/lib/maintenance/suggested-next";
 
 type ServiceLogRow = {
   id: string;
@@ -42,6 +56,16 @@ type ServiceLogRow = {
   taskLabel: string;
   title: string | null;
   schedule_id: string | null;
+};
+
+type NextServiceRecommendation = {
+  headline: string;
+  primaryService: string;
+  rationale: string;
+  urgency: "routine" | "soon" | "due_now";
+  estimatedMilesRemaining: number | null;
+  relatedScheduleTask: string | null;
+  caveats: string | null;
 };
 
 function formatShortDate(iso: string | null): string {
@@ -69,6 +93,72 @@ function todayYmd(): string {
   const m = String(t.getMonth() + 1).padStart(2, "0");
   const d = String(t.getDate()).padStart(2, "0");
   return `${y}-${m}-${d}`;
+}
+
+function isValidYmd(s: string): boolean {
+  return /^\d{4}-\d{2}-\d{2}$/.test(s);
+}
+
+/** Prefixed to notes when DB has not migrated `user_provided` source yet (fallback insert). */
+const SCHEDULE_IMPORT_NOTE_MARKER = "Source: user-provided import.";
+
+function formatScheduleSource(
+  source: MaintenanceSchedule["source"],
+  notes?: string | null,
+): string {
+  if (
+    source === "custom" &&
+    notes &&
+    notes.startsWith(SCHEDULE_IMPORT_NOTE_MARKER)
+  ) {
+    return "User provided";
+  }
+  switch (source) {
+    case "user_provided":
+      return "User provided";
+    case "manual":
+      return "Manual";
+    case "web":
+      return "Web";
+    case "custom":
+      return "Custom";
+    default:
+      return source;
+  }
+}
+
+type ScheduleSourceFilter =
+  | "all"
+  | "user_provided"
+  | "manual"
+  | "web"
+  | "custom";
+
+function scheduleRowMatchesSourceFilter(
+  row: MaintenanceSchedule,
+  filter: ScheduleSourceFilter,
+): boolean {
+  switch (filter) {
+    case "all":
+      return true;
+    case "user_provided":
+      return (
+        row.source === "user_provided" ||
+        (row.source === "custom" &&
+          !!row.notes?.startsWith(SCHEDULE_IMPORT_NOTE_MARKER))
+      );
+    case "manual":
+      return row.source === "manual";
+    case "web":
+      return row.source === "web";
+    case "custom":
+      return (
+        row.source === "custom" &&
+        !row.notes?.startsWith(SCHEDULE_IMPORT_NOTE_MARKER)
+      );
+    default:
+      return true;
+  }
 }
 
 function ScheduleRow({
@@ -177,8 +267,8 @@ function ScheduleRow({
           {row.interval_months ? ` / ${row.interval_months} mo` : ""}
         </TableCell>
         <TableCell>
-          <Badge variant="outline" className="text-[10px] capitalize">
-            {row.source}
+          <Badge variant="outline" className="text-[10px]">
+            {formatScheduleSource(row.source, row.notes)}
           </Badge>
         </TableCell>
         <TableCell className="text-muted-foreground max-w-[180px] truncate text-xs">
@@ -513,7 +603,12 @@ export function MaintenanceTracker({ initialCarId }: { initialCarId: string | nu
     {},
   );
   const [logsByCar, setLogsByCar] = useState<Record<string, ServiceLogRow[]>>({});
+  const [suggestionsByCar, setSuggestionsByCar] = useState<
+    Record<string, MaintenanceSuggestion[]>
+  >({});
   const [tab, setTab] = useCarSelection("");
+  const [scheduleSourceFilter, setScheduleSourceFilter] =
+    useState<ScheduleSourceFilter>("user_provided");
   const [loading, setLoading] = useState(true);
   const [generating, setGenerating] = useState(false);
   const [addOpen, setAddOpen] = useState(false);
@@ -529,6 +624,42 @@ export function MaintenanceTracker({ initialCarId }: { initialCarId: string | nu
   const [manualCost, setManualCost] = useState("");
   const [manualNotes, setManualNotes] = useState("");
   const [manualSaving, setManualSaving] = useState(false);
+  const [receiptParsing, setReceiptParsing] = useState(false);
+  const [receiptError, setReceiptError] = useState<string | null>(null);
+  const uploadInputRef = useRef<HTMLInputElement>(null);
+  const cameraInputRef = useRef<HTMLInputElement>(null);
+
+  const [recommendOpen, setRecommendOpen] = useState(false);
+  const [recommendLoading, setRecommendLoading] = useState(false);
+  const [recommendError, setRecommendError] = useState<string | null>(null);
+  const [recommendResult, setRecommendResult] =
+    useState<NextServiceRecommendation | null>(null);
+  const [recommendSaveLoading, setRecommendSaveLoading] = useState(false);
+
+  type ParsedScheduleDraft = {
+    key: string;
+    task: string;
+    interval_miles: string;
+    interval_months: string;
+    notes: string;
+    last_completed_at: string;
+    last_mileage_at: string;
+  };
+
+  const [scheduleImportOpen, setScheduleImportOpen] = useState(false);
+  const [scheduleImportStep, setScheduleImportStep] = useState<
+    "pick" | "review"
+  >("pick");
+  const [scheduleDrafts, setScheduleDrafts] = useState<ParsedScheduleDraft[]>(
+    [],
+  );
+  const [scheduleParsing, setScheduleParsing] = useState(false);
+  const [scheduleParseError, setScheduleParseError] = useState<string | null>(
+    null,
+  );
+  const [scheduleBulkSaving, setScheduleBulkSaving] = useState(false);
+  const scheduleCameraRef = useRef<HTMLInputElement>(null);
+  const scheduleFileRef = useRef<HTMLInputElement>(null);
 
   const openManualLog = useCallback(
     (car: Car) => {
@@ -538,10 +669,270 @@ export function MaintenanceTracker({ initialCarId }: { initialCarId: string | nu
       setManualMileage(String(car.mileage));
       setManualCost("");
       setManualNotes("");
+      setReceiptError(null);
       setManualLogOpen(true);
     },
     [],
   );
+
+  const parseReceiptFromFile = useCallback(
+    async (file: File) => {
+      if (!manualCarId) return;
+      setReceiptError(null);
+      setReceiptParsing(true);
+      try {
+        const dataUrl = await new Promise<string>((resolve, reject) => {
+          const r = new FileReader();
+          r.onload = () => resolve(String(r.result));
+          r.onerror = () => reject(new Error("Could not read file"));
+          r.readAsDataURL(file);
+        });
+        const comma = dataUrl.indexOf(",");
+        const base64 = comma >= 0 ? dataUrl.slice(comma + 1) : dataUrl;
+        const res = await fetch("/api/maintenance/parse-receipt", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            imageBase64: base64,
+            mediaType: file.type || "image/jpeg",
+            carId: manualCarId,
+          }),
+        });
+        const json = (await res.json()) as {
+          error?: string;
+          parsed?: {
+            title: string;
+            serviceDate: string | null;
+            mileageAt: number | null;
+            totalCost: number | null;
+            notes: string | null;
+          };
+        };
+        if (!res.ok) {
+          throw new Error(json.error || "Parse failed");
+        }
+        if (!json.parsed) throw new Error("No data returned");
+        const p = json.parsed;
+        if (p.title?.trim()) setManualTitle(p.title.trim());
+        if (p.serviceDate && isValidYmd(p.serviceDate)) setManualDate(p.serviceDate);
+        if (p.mileageAt != null && Number.isFinite(p.mileageAt)) {
+          setManualMileage(String(Math.round(p.mileageAt)));
+        }
+        if (p.totalCost != null && Number.isFinite(p.totalCost)) {
+          setManualCost(String(p.totalCost));
+        }
+        if (p.notes?.trim()) setManualNotes(p.notes.trim());
+      } catch (e) {
+        setReceiptError(
+          e instanceof Error ? e.message : "Could not read receipt",
+        );
+      } finally {
+        setReceiptParsing(false);
+      }
+    },
+    [manualCarId],
+  );
+
+  function onReceiptFileChange(e: React.ChangeEvent<HTMLInputElement>) {
+    const f = e.target.files?.[0];
+    e.target.value = "";
+    if (f) void parseReceiptFromFile(f);
+  }
+
+  function openScheduleImportModal() {
+    setScheduleImportStep("pick");
+    setScheduleDrafts([]);
+    setScheduleParseError(null);
+    setScheduleImportOpen(true);
+  }
+
+  async function parseScheduleFromFile(file: File) {
+    if (!tab) return;
+    setScheduleParseError(null);
+    setScheduleParsing(true);
+    try {
+      const dataUrl = await new Promise<string>((resolve, reject) => {
+        const r = new FileReader();
+        r.onload = () => resolve(String(r.result));
+        r.onerror = () => reject(new Error("Could not read file"));
+        r.readAsDataURL(file);
+      });
+      const comma = dataUrl.indexOf(",");
+      const base64 = comma >= 0 ? dataUrl.slice(comma + 1) : dataUrl;
+      const lower = file.name.toLowerCase();
+      const isPdf =
+        file.type === "application/pdf" || lower.endsWith(".pdf");
+      const res = await fetch("/api/maintenance/parse-schedule-list", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(
+          isPdf
+            ? { carId: tab, pdfBase64: base64 }
+            : {
+                carId: tab,
+                imageBase64: base64,
+                mediaType: file.type || "image/jpeg",
+              },
+        ),
+      });
+      const json = (await res.json()) as {
+        error?: string;
+        items?: Array<{
+          task?: string;
+          interval_miles?: number | null;
+          interval_months?: number | null;
+          notes?: string | null;
+          lastCompletedDate?: string | null;
+          lastMileageAt?: number | null;
+        }>;
+      };
+      if (!res.ok) throw new Error(json.error || "Parse failed");
+      const items = json.items ?? [];
+      const drafts: ParsedScheduleDraft[] = items.map((it) => ({
+        key: crypto.randomUUID(),
+        task: (it.task ?? "").trim(),
+        interval_miles:
+          it.interval_miles != null && Number.isFinite(it.interval_miles)
+            ? String(Math.round(it.interval_miles))
+            : "",
+        interval_months:
+          it.interval_months != null && Number.isFinite(it.interval_months)
+            ? String(Math.round(it.interval_months))
+            : "",
+        notes: (it.notes ?? "").trim(),
+        last_completed_at:
+          it.lastCompletedDate && isValidYmd(it.lastCompletedDate)
+            ? it.lastCompletedDate
+            : "",
+        last_mileage_at:
+          it.lastMileageAt != null && Number.isFinite(it.lastMileageAt)
+            ? String(Math.round(it.lastMileageAt))
+            : "",
+      }));
+      setScheduleDrafts(drafts);
+      if (drafts.length === 0) {
+        setScheduleParseError(
+          "No tasks were extracted. Try a clearer photo or a different page.",
+        );
+        setScheduleImportStep("pick");
+      } else {
+        setScheduleImportStep("review");
+      }
+    } catch (e) {
+      setScheduleParseError(
+        e instanceof Error ? e.message : "Could not read schedule",
+      );
+    } finally {
+      setScheduleParsing(false);
+    }
+  }
+
+  function onScheduleFileInputChange(e: React.ChangeEvent<HTMLInputElement>) {
+    const f = e.target.files?.[0];
+    e.target.value = "";
+    if (f) void parseScheduleFromFile(f);
+  }
+
+  function buildScheduleImportRows(
+    drafts: ParsedScheduleDraft[],
+    source: "user_provided" | "custom",
+  ) {
+    return drafts.map((d) => {
+      const mi = d.interval_miles.trim()
+        ? parseInt(d.interval_miles, 10)
+        : NaN;
+      const mo = d.interval_months.trim()
+        ? parseInt(d.interval_months, 10)
+        : NaN;
+      const lastMi = d.last_mileage_at.trim()
+        ? parseInt(d.last_mileage_at, 10)
+        : NaN;
+      const baseNotes = d.notes.trim() || null;
+      const notes =
+        source === "custom"
+          ? baseNotes
+            ? `${SCHEDULE_IMPORT_NOTE_MARKER} ${baseNotes}`
+            : SCHEDULE_IMPORT_NOTE_MARKER
+          : baseNotes;
+      return {
+        car_id: tab!,
+        task: d.task.trim(),
+        interval_miles: Number.isFinite(mi) ? mi : null,
+        interval_months: Number.isFinite(mo) ? mo : null,
+        notes,
+        is_custom: true,
+        source,
+        last_completed_at:
+          d.last_completed_at && isValidYmd(d.last_completed_at)
+            ? localDateToNoonIso(d.last_completed_at)
+            : null,
+        last_mileage_at: Number.isFinite(lastMi) ? lastMi : null,
+      };
+    });
+  }
+
+  async function bulkAddParsedSchedules() {
+    if (!tab) return;
+    const toSave = scheduleDrafts.filter((d) => d.task.trim());
+    if (toSave.length === 0) {
+      alert("Add at least one task with a name, or cancel.");
+      return;
+    }
+    setScheduleBulkSaving(true);
+    const supabase = createClient();
+    const rowsPreferred = buildScheduleImportRows(toSave, "user_provided");
+    let { error } = await supabase
+      .from("maintenance_schedules")
+      .insert(rowsPreferred);
+
+    const sourceCheckFailed =
+      error &&
+      (error.message?.includes("maintenance_schedules_source_check") ||
+        error.message?.includes("source_check"));
+
+    if (sourceCheckFailed) {
+      const rowsFallback = buildScheduleImportRows(toSave, "custom");
+      const second = await supabase
+        .from("maintenance_schedules")
+        .insert(rowsFallback);
+      error = second.error;
+    }
+
+    setScheduleBulkSaving(false);
+    if (error) {
+      alert(
+        `${error.message}\n\nIf this mentions a check constraint, run the SQL in supabase/migrations/20250409000100_maintenance_schedules_user_provided.sql on your database.`,
+      );
+      return;
+    }
+    setScheduleImportOpen(false);
+    setScheduleImportStep("pick");
+    setScheduleDrafts([]);
+    await load();
+  }
+
+  async function clearAllScheduleRows() {
+    if (!tab) return;
+    const count = schedules[tab]?.length ?? 0;
+    if (count === 0) return;
+    if (
+      !confirm(
+        `Delete all ${count} maintenance task rows for this vehicle? This cannot be undone.`,
+      )
+    ) {
+      return;
+    }
+    const supabase = createClient();
+    const { error } = await supabase
+      .from("maintenance_schedules")
+      .delete()
+      .eq("car_id", tab);
+    if (error) {
+      alert(error.message);
+      return;
+    }
+    await load();
+  }
 
   async function saveManualLog() {
     if (!manualCarId || !manualTitle.trim()) return;
@@ -581,6 +972,7 @@ export function MaintenanceTracker({ initialCarId }: { initialCarId: string | nu
     setCars(list);
     const map: Record<string, MaintenanceSchedule[]> = {};
     const logsMap: Record<string, ServiceLogRow[]> = {};
+    const suggestionsMap: Record<string, MaintenanceSuggestion[]> = {};
     for (const car of list) {
       const { data: sch } = await supabase
         .from("maintenance_schedules")
@@ -633,9 +1025,19 @@ export function MaintenanceTracker({ initialCarId }: { initialCarId: string | nu
           schedule_id: row.schedule_id,
         };
       });
+
+      const { data: sugRows, error: sugErr } = await supabase
+        .from("maintenance_suggestions")
+        .select("*")
+        .eq("car_id", car.id)
+        .order("created_at", { ascending: false });
+      suggestionsMap[car.id] = sugErr
+        ? []
+        : ((sugRows ?? []) as MaintenanceSuggestion[]);
     }
     setSchedules(map);
     setLogsByCar(logsMap);
+    setSuggestionsByCar(suggestionsMap);
     setLoading(false);
   }, []);
 
@@ -656,6 +1058,38 @@ export function MaintenanceTracker({ initialCarId }: { initialCarId: string | nu
       setTab(first);
     }
   }, [cars, tab, initialCarId, setTab]);
+
+  async function runRecommendNext() {
+    if (!tab) return;
+    setRecommendOpen(true);
+    setRecommendError(null);
+    setRecommendResult(null);
+    setRecommendLoading(true);
+    try {
+      const res = await fetch("/api/maintenance/recommend-next", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ carId: tab }),
+      });
+      const json = (await res.json()) as {
+        error?: string;
+        recommendation?: NextServiceRecommendation;
+      };
+      if (!res.ok) {
+        throw new Error(json.error ?? res.statusText);
+      }
+      if (!json.recommendation) {
+        throw new Error("No recommendation returned");
+      }
+      setRecommendResult(json.recommendation);
+    } catch (e) {
+      setRecommendError(
+        e instanceof Error ? e.message : "Could not get recommendation",
+      );
+    } finally {
+      setRecommendLoading(false);
+    }
+  }
 
   async function runGenerate() {
     if (!tab) return;
@@ -714,6 +1148,107 @@ export function MaintenanceTracker({ initialCarId }: { initialCarId: string | nu
     await load();
   }
 
+  async function saveRecommendationToList() {
+    if (!tab || !recommendResult) return;
+    setRecommendSaveLoading(true);
+    const supabase = createClient();
+    const r = recommendResult;
+    const { error } = await supabase.from("maintenance_suggestions").insert({
+      car_id: tab,
+      headline: r.headline.trim(),
+      primary_service: r.primaryService.trim(),
+      rationale: r.rationale?.trim() || null,
+      urgency: r.urgency,
+      estimated_miles_remaining:
+        r.estimatedMilesRemaining != null &&
+        Number.isFinite(r.estimatedMilesRemaining)
+          ? Math.round(r.estimatedMilesRemaining)
+          : null,
+      related_schedule_task: r.relatedScheduleTask?.trim() || null,
+      caveats: r.caveats?.trim() || null,
+    });
+    setRecommendSaveLoading(false);
+    if (error) {
+      alert(error.message);
+      return;
+    }
+    setRecommendOpen(false);
+    setRecommendResult(null);
+    await load();
+  }
+
+  async function completeSuggestion(s: MaintenanceSuggestion, car: Car) {
+    const supabase = createClient();
+    const rows = schedules[car.id] ?? [];
+    let scheduleId: string | null = null;
+    if (s.related_schedule_task?.trim()) {
+      const needle = s.related_schedule_task.trim().toLowerCase();
+      const match = rows.find((r) => r.task.trim().toLowerCase() === needle);
+      if (match) scheduleId = match.id;
+    }
+    const noteParts = [
+      s.headline.trim(),
+      s.rationale?.trim(),
+      s.caveats?.trim(),
+    ].filter(Boolean);
+    const notes =
+      noteParts.length > 0
+        ? `${noteParts.join("\n\n")}\n\n(Completed from saved Motiv suggestion.)`
+        : "(Completed from saved Motiv suggestion.)";
+
+    const { error: logErr } = await supabase.from("maintenance_logs").insert({
+      schedule_id: scheduleId,
+      car_id: car.id,
+      title: s.primary_service.trim(),
+      completed_at: new Date().toISOString(),
+      mileage_at: car.mileage,
+      notes,
+      cost: null,
+    });
+    if (logErr) {
+      alert(logErr.message);
+      return;
+    }
+    if (scheduleId) {
+      await supabase
+        .from("maintenance_schedules")
+        .update({
+          last_completed_at: new Date().toISOString(),
+          last_mileage_at: car.mileage,
+        })
+        .eq("id", scheduleId);
+    }
+    await supabase.from("maintenance_suggestions").delete().eq("id", s.id);
+    await load();
+  }
+
+  async function deleteSuggestion(id: string) {
+    if (!confirm("Remove this saved suggestion?")) return;
+    const supabase = createClient();
+    await supabase.from("maintenance_suggestions").delete().eq("id", id);
+    await load();
+  }
+
+  const suggestedNext = useMemo(() => {
+    const act = cars.find((c) => c.id === tab) ?? cars[0];
+    if (!act) {
+      return {
+        line: "Select a vehicle to see the next suggested task.",
+        task: null,
+        hasRankedNext: false,
+      };
+    }
+    const scheduleRows = schedules[act.id] ?? [];
+    const hist = logsByCar[act.id] ?? [];
+    const logInputs = hist.map((h) => ({
+      schedule_id: h.schedule_id,
+      completed_at: h.completed_at,
+      mileage_at: h.mileage_at,
+      title: h.title,
+    }));
+    return computeSuggestedNextMaintenance(act, scheduleRows, logInputs);
+  }, [cars, tab, schedules, logsByCar]);
+
   if (loading) {
     return (
       <div className="text-muted-foreground flex items-center gap-2 text-sm">
@@ -726,20 +1261,24 @@ export function MaintenanceTracker({ initialCarId }: { initialCarId: string | nu
   if (cars.length === 0) {
     return (
       <p className="text-muted-foreground text-sm">
-        Add a vehicle in Settings to build a maintenance schedule.
+        Add a vehicle in Garage to build a maintenance schedule.
       </p>
     );
   }
 
   const active = cars.find((c) => c.id === tab) ?? cars[0];
   const rows = schedules[active.id] ?? [];
+  const filteredScheduleRows = rows.filter((r) =>
+    scheduleRowMatchesSourceFilter(r, scheduleSourceFilter),
+  );
   const historyRows = logsByCar[active.id] ?? [];
+  const suggestionRows = suggestionsByCar[active.id] ?? [];
 
   return (
     <div className="space-y-4">
-      <div className="flex justify-between items-center mb-4">
+      <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between">
         <Select value={tab} onValueChange={(val) => val && setTab(val)}>
-          <SelectTrigger className="w-[280px]">
+          <SelectTrigger className="w-full sm:w-[280px]">
             <SelectValue placeholder="Select a car">
               {(() => {
                 const c = cars.find((car) => car.id === tab);
@@ -760,6 +1299,36 @@ export function MaintenanceTracker({ initialCarId }: { initialCarId: string | nu
             ))}
           </SelectContent>
         </Select>
+        <div className="flex w-full flex-col gap-1.5 sm:w-auto sm:min-w-[220px]">
+          <Label className="text-muted-foreground text-xs">Task source</Label>
+          <Select
+            value={scheduleSourceFilter}
+            onValueChange={(val) =>
+              val && setScheduleSourceFilter(val as ScheduleSourceFilter)
+            }
+          >
+            <SelectTrigger className="w-full sm:w-[220px]">
+              <SelectValue placeholder="Source" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="user_provided" label="User provided">
+                User provided
+              </SelectItem>
+              <SelectItem value="all" label="All sources">
+                All sources
+              </SelectItem>
+              <SelectItem value="manual" label="Manual">
+                Manual
+              </SelectItem>
+              <SelectItem value="web" label="Web">
+                Web
+              </SelectItem>
+              <SelectItem value="custom" label="Custom">
+                Custom
+              </SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
       </div>
 
       <div className="mt-4 space-y-4">
@@ -822,6 +1391,25 @@ export function MaintenanceTracker({ initialCarId }: { initialCarId: string | nu
               </DialogFooter>
             </DialogContent>
           </Dialog>
+          <Button
+            type="button"
+            variant="outline"
+            disabled={!tab || scheduleParsing}
+            onClick={() => openScheduleImportModal()}
+          >
+            <ScanLine className="mr-2 size-4" />
+            Import tasks (photo/PDF)
+          </Button>
+          <Button
+            type="button"
+            variant="outline"
+            className="text-destructive hover:text-destructive"
+            disabled={rows.length === 0}
+            onClick={() => void clearAllScheduleRows()}
+          >
+            <Trash2 className="mr-2 size-4" />
+            Clear all rows
+          </Button>
         </div>
 
         <div className="rounded-xl border border-border/50 bg-card/50 backdrop-blur-sm">
@@ -846,8 +1434,21 @@ export function MaintenanceTracker({ initialCarId }: { initialCarId: string | nu
                     No rows yet. Run auto-populate or add your own.
                   </TableCell>
                 </TableRow>
+              ) : filteredScheduleRows.length === 0 ? (
+                <TableRow>
+                  <TableCell
+                    colSpan={6}
+                    className="text-muted-foreground text-center text-sm"
+                  >
+                    No tasks match this source filter. Choose another{" "}
+                    <span className="text-foreground font-medium">
+                      Task source
+                    </span>{" "}
+                    above to see other rows.
+                  </TableCell>
+                </TableRow>
               ) : (
-                rows.map((row) => (
+                filteredScheduleRows.map((row) => (
                   <ScheduleRow
                     key={row.id}
                     row={row}
@@ -856,6 +1457,155 @@ export function MaintenanceTracker({ initialCarId }: { initialCarId: string | nu
                     onDelete={() => void deleteSchedule(row.id)}
                     onUpdated={() => void load()}
                   />
+                ))
+              )}
+            </TableBody>
+          </Table>
+        </div>
+
+        <div className="rounded-xl border border-border/50 bg-card/50 backdrop-blur-sm">
+          <div className="border-border/50 border-b px-4 py-3">
+            <h3 className="text-sm font-semibold tracking-tight">
+              Suggested next maintenance
+            </h3>
+            <div className="text-muted-foreground mt-0.5 max-w-2xl space-y-2 text-xs leading-relaxed">
+              <p>
+                <strong className="text-foreground font-medium">
+                  Facts only — nothing is invented.
+                </strong>{" "}
+                This line is computed in the app from data you already entered: tasks
+                and intervals in the schedule table above, the{" "}
+                <strong className="text-foreground font-medium">
+                  real odometer
+                </strong>{" "}
+                stored for this vehicle, and your{" "}
+                <strong className="text-foreground font-medium">
+                  service history
+                </strong>{" "}
+                (every row below, plus &quot;Last done&quot; on each schedule row).
+                It does <strong className="text-foreground font-medium">not</strong>{" "}
+                use AI here and cannot add maintenance you never listed.
+              </p>
+              <p>
+                For date-based intervals with no prior service date in that history,
+                the app counts months from{" "}
+                <strong className="text-foreground font-medium">
+                  January 1 of the vehicle model year
+                </strong>{" "}
+                only as a calendar anchor — it still does not assume any work was
+                performed.
+              </p>
+            </div>
+          </div>
+          <div className="px-4 py-4">
+            <p className="text-foreground text-sm font-medium leading-relaxed">
+              {suggestedNext.line}
+            </p>
+            <p className="text-muted-foreground mt-2 border-border/40 border-t pt-2 text-[0.7rem] leading-relaxed">
+              If this looks off, check that odometer, schedule intervals, and service
+              history match reality — the suggestion only reflects what&apos;s in
+              those fields.
+            </p>
+          </div>
+        </div>
+
+        <div className="rounded-xl border border-border/50 bg-card/50 backdrop-blur-sm">
+          <div className="border-border/50 border-b px-4 py-3">
+            <h3 className="text-sm font-semibold tracking-tight">
+              Saved AI suggestions
+            </h3>
+            <p className="text-muted-foreground mt-0.5 max-w-xl text-xs">
+              These entries come from{" "}
+              <strong className="text-foreground font-medium">
+                Suggest next service
+              </strong>{" "}
+              (AI-assisted) and are separate from the factual suggestion above. Save
+              a recommendation to keep it here, mark complete to add it to service
+              history, or delete if you change your mind.
+            </p>
+          </div>
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>Saved</TableHead>
+                <TableHead>Summary</TableHead>
+                <TableHead>Urgency</TableHead>
+                <TableHead className="text-right">Actions</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {suggestionRows.length === 0 ? (
+                <TableRow>
+                  <TableCell
+                    colSpan={4}
+                    className="text-muted-foreground py-8 text-center text-sm"
+                  >
+                    No saved suggestions. Run{" "}
+                    <span className="text-foreground font-medium">
+                      Suggest next service
+                    </span>{" "}
+                    and choose{" "}
+                    <span className="text-foreground font-medium">
+                      Save to list
+                    </span>
+                    .
+                  </TableCell>
+                </TableRow>
+              ) : (
+                suggestionRows.map((s) => (
+                  <TableRow key={s.id}>
+                    <TableCell className="whitespace-nowrap text-sm">
+                      {formatShortDate(s.created_at)}
+                    </TableCell>
+                    <TableCell>
+                      <p className="font-medium text-sm">{s.headline}</p>
+                      <p className="text-muted-foreground mt-0.5 text-xs">
+                        {s.primary_service}
+                      </p>
+                    </TableCell>
+                    <TableCell>
+                      <Badge
+                        variant={
+                          s.urgency === "due_now"
+                            ? "destructive"
+                            : s.urgency === "soon"
+                              ? "secondary"
+                              : "outline"
+                        }
+                        className="text-[10px] capitalize"
+                      >
+                        {s.urgency === "due_now"
+                          ? "Due now"
+                          : s.urgency === "soon"
+                            ? "Soon"
+                            : "Routine"}
+                      </Badge>
+                    </TableCell>
+                    <TableCell className="text-right">
+                      <div className="flex justify-end gap-1">
+                        <Button
+                          size="sm"
+                          variant="default"
+                          type="button"
+                          className="h-7 text-xs"
+                          onClick={() => void completeSuggestion(s, active)}
+                        >
+                          <Check className="mr-1 size-3.5" />
+                          Complete
+                        </Button>
+                        <Button
+                          size="icon"
+                          variant="ghost"
+                          type="button"
+                          className="text-muted-foreground hover:text-destructive size-7"
+                          onClick={() => void deleteSuggestion(s.id)}
+                          aria-label="Delete suggestion"
+                        >
+                          <Trash2 className="size-4" />
+                        </Button>
+                      </div>
+                    </TableCell>
+                  </TableRow>
                 ))
               )}
             </TableBody>
@@ -876,16 +1626,31 @@ export function MaintenanceTracker({ initialCarId }: { initialCarId: string | nu
                 next.
               </p>
             </div>
-            <Button
-              type="button"
-              variant="secondary"
-              size="sm"
-              className="shrink-0"
-              onClick={() => openManualLog(active)}
-            >
-              <Plus className="mr-1.5 size-3.5" />
-              Add manual log
-            </Button>
+            <div className="flex shrink-0 flex-wrap justify-end gap-2">
+              <Button
+                type="button"
+                disabled={recommendLoading}
+                onClick={() => void runRecommendNext()}
+                className="shrink-0 ai-gradient glow-primary rounded-xl border-0 text-white shadow-md hover:opacity-90 disabled:opacity-50"
+              >
+                {recommendLoading ? (
+                  <Loader2 className="mr-2 size-4 animate-spin" />
+                ) : (
+                  <Sparkles className="mr-2 size-4" />
+                )}
+                Suggest next service
+              </Button>
+              <Button
+                type="button"
+                variant="secondary"
+                size="sm"
+                className="shrink-0"
+                onClick={() => openManualLog(active)}
+              >
+                <Plus className="mr-1.5 size-3.5" />
+                Add manual log
+              </Button>
+            </div>
           </div>
           <Table>
             <TableHeader>
@@ -931,12 +1696,80 @@ export function MaintenanceTracker({ initialCarId }: { initialCarId: string | nu
         </div>
       </div>
 
-      <Dialog open={manualLogOpen} onOpenChange={setManualLogOpen}>
-        <DialogContent className="sm:max-w-md">
+      <Dialog
+        open={manualLogOpen}
+        onOpenChange={(open) => {
+          setManualLogOpen(open);
+          if (!open) setReceiptError(null);
+        }}
+      >
+        <DialogContent className="sm:max-w-lg">
           <DialogHeader>
             <DialogTitle>Add manual service log</DialogTitle>
           </DialogHeader>
           <div className="space-y-3 py-1">
+            <div className="bg-muted/40 space-y-2 rounded-xl border border-border/50 p-3">
+              <p className="text-sm font-medium tracking-tight">
+                Scan a receipt or invoice
+              </p>
+              <p className="text-muted-foreground text-xs leading-relaxed">
+                Take a photo or upload an image of a service bill. Motiv will
+                read it and fill the fields below — always review before saving.
+              </p>
+              <div className="flex flex-wrap gap-2">
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  className="rounded-xl"
+                  disabled={receiptParsing || !manualCarId}
+                  onClick={() => cameraInputRef.current?.click()}
+                >
+                  <Camera className="mr-1.5 size-3.5" />
+                  Take photo
+                </Button>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  className="rounded-xl"
+                  disabled={receiptParsing || !manualCarId}
+                  onClick={() => uploadInputRef.current?.click()}
+                >
+                  <Upload className="mr-1.5 size-3.5" />
+                  Upload image
+                </Button>
+              </div>
+              <input
+                ref={cameraInputRef}
+                type="file"
+                accept="image/*"
+                capture="environment"
+                className="sr-only"
+                aria-hidden
+                tabIndex={-1}
+                onChange={onReceiptFileChange}
+              />
+              <input
+                ref={uploadInputRef}
+                type="file"
+                accept="image/*"
+                className="sr-only"
+                aria-hidden
+                tabIndex={-1}
+                onChange={onReceiptFileChange}
+              />
+              {receiptParsing ? (
+                <div className="text-muted-foreground flex items-center gap-2 text-xs">
+                  <Loader2 className="size-3.5 animate-spin" />
+                  Reading receipt…
+                </div>
+              ) : null}
+              {receiptError ? (
+                <p className="text-destructive text-xs">{receiptError}</p>
+              ) : null}
+            </div>
+
             <div>
               <Label>Service / task name</Label>
               <Input
@@ -992,7 +1825,9 @@ export function MaintenanceTracker({ initialCarId }: { initialCarId: string | nu
             <Button
               type="button"
               onClick={() => void saveManualLog()}
-              disabled={manualSaving || !manualTitle.trim()}
+              disabled={
+                manualSaving || receiptParsing || !manualTitle.trim()
+              }
             >
               {manualSaving ? (
                 <Loader2 className="size-4 animate-spin" />
@@ -1000,6 +1835,405 @@ export function MaintenanceTracker({ initialCarId }: { initialCarId: string | nu
                 "Save log"
               )}
             </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog
+        open={scheduleImportOpen}
+        onOpenChange={(open) => {
+          setScheduleImportOpen(open);
+          if (!open) {
+            setScheduleParseError(null);
+            setScheduleImportStep("pick");
+            setScheduleDrafts([]);
+          }
+        }}
+      >
+        <DialogContent className="flex max-h-[90vh] max-w-3xl flex-col gap-0 p-6">
+          <DialogHeader className="flex-shrink-0">
+            <DialogTitle>
+              {scheduleImportStep === "pick"
+                ? "Import maintenance tasks"
+                : "Review imported tasks"}
+            </DialogTitle>
+          </DialogHeader>
+
+          <div className="min-h-0 flex-1 overflow-y-auto py-3">
+            {scheduleImportStep === "pick" ? (
+              <div className="bg-muted/40 space-y-2 rounded-xl border border-border/50 p-3">
+                <p className="text-sm font-medium tracking-tight">
+                  Scan or upload a maintenance schedule
+                </p>
+                <p className="text-muted-foreground text-xs leading-relaxed">
+                  Take a photo or upload an image or PDF of a scheduled
+                  maintenance list. Motiv will extract tasks — review and edit
+                  before adding. Saved rows use source{" "}
+                  <span className="text-foreground font-medium">
+                    User provided
+                  </span>
+                  .
+                </p>
+                <div className="flex flex-wrap gap-2">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    className="rounded-xl"
+                    disabled={scheduleParsing || !tab}
+                    onClick={() => scheduleCameraRef.current?.click()}
+                  >
+                    <Camera className="mr-1.5 size-3.5" />
+                    Take photo
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    className="rounded-xl"
+                    disabled={scheduleParsing || !tab}
+                    onClick={() => scheduleFileRef.current?.click()}
+                  >
+                    <Upload className="mr-1.5 size-3.5" />
+                    Upload image or PDF
+                  </Button>
+                </div>
+                <input
+                  ref={scheduleCameraRef}
+                  type="file"
+                  accept="image/*"
+                  capture="environment"
+                  className="sr-only"
+                  aria-hidden
+                  tabIndex={-1}
+                  onChange={onScheduleFileInputChange}
+                />
+                <input
+                  ref={scheduleFileRef}
+                  type="file"
+                  accept="image/*,application/pdf,.pdf"
+                  className="sr-only"
+                  aria-hidden
+                  tabIndex={-1}
+                  onChange={onScheduleFileInputChange}
+                />
+                {scheduleParsing ? (
+                  <div className="text-muted-foreground flex items-center gap-2 text-xs">
+                    <Loader2 className="size-3.5 animate-spin" />
+                    Reading schedule…
+                  </div>
+                ) : null}
+                {scheduleParseError ? (
+                  <p className="text-destructive text-xs">{scheduleParseError}</p>
+                ) : null}
+              </div>
+            ) : (
+              <div className="space-y-2">
+                <p className="text-muted-foreground text-xs">
+                  Edit any field, remove rows you don&apos;t need, then add all to
+                  this vehicle&apos;s schedule.
+                </p>
+                <div className="rounded-lg border border-border/50">
+                  <div className="max-h-[min(420px,50vh)] overflow-x-auto overflow-y-auto">
+                    <Table>
+                      <TableHeader>
+                        <TableRow>
+                          <TableHead className="min-w-[140px] whitespace-normal">
+                            Task
+                          </TableHead>
+                          <TableHead className="w-[76px] px-1">Mi</TableHead>
+                          <TableHead className="w-[76px] px-1">Mo</TableHead>
+                          <TableHead className="w-[132px] px-1">
+                            Last done
+                          </TableHead>
+                          <TableHead className="w-[84px] px-1">Last mi</TableHead>
+                          <TableHead className="min-w-[120px] whitespace-normal">
+                            Notes
+                          </TableHead>
+                          <TableHead className="w-10 p-1" />
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
+                        {scheduleDrafts.map((d) => (
+                          <TableRow key={d.key}>
+                            <TableCell className="p-1 align-top">
+                              <Input
+                                value={d.task}
+                                onChange={(e) =>
+                                  setScheduleDrafts((prev) =>
+                                    prev.map((x) =>
+                                      x.key === d.key
+                                        ? { ...x, task: e.target.value }
+                                        : x,
+                                    ),
+                                  )
+                                }
+                                className="h-8 text-xs"
+                              />
+                            </TableCell>
+                            <TableCell className="p-1 align-top">
+                              <Input
+                                value={d.interval_miles}
+                                onChange={(e) =>
+                                  setScheduleDrafts((prev) =>
+                                    prev.map((x) =>
+                                      x.key === d.key
+                                        ? {
+                                            ...x,
+                                            interval_miles: e.target.value,
+                                          }
+                                        : x,
+                                    ),
+                                  )
+                                }
+                                type="number"
+                                className="h-8 w-full min-w-0 px-2 text-xs"
+                              />
+                            </TableCell>
+                            <TableCell className="p-1 align-top">
+                              <Input
+                                value={d.interval_months}
+                                onChange={(e) =>
+                                  setScheduleDrafts((prev) =>
+                                    prev.map((x) =>
+                                      x.key === d.key
+                                        ? {
+                                            ...x,
+                                            interval_months: e.target.value,
+                                          }
+                                        : x,
+                                    ),
+                                  )
+                                }
+                                type="number"
+                                className="h-8 w-full min-w-0 px-2 text-xs"
+                              />
+                            </TableCell>
+                            <TableCell className="p-1 align-top">
+                              <Input
+                                type="date"
+                                value={d.last_completed_at}
+                                onChange={(e) =>
+                                  setScheduleDrafts((prev) =>
+                                    prev.map((x) =>
+                                      x.key === d.key
+                                        ? {
+                                            ...x,
+                                            last_completed_at: e.target.value,
+                                          }
+                                        : x,
+                                    ),
+                                  )
+                                }
+                                className="h-8 w-full min-w-0 px-1 text-xs"
+                              />
+                            </TableCell>
+                            <TableCell className="p-1 align-top">
+                              <Input
+                                value={d.last_mileage_at}
+                                onChange={(e) =>
+                                  setScheduleDrafts((prev) =>
+                                    prev.map((x) =>
+                                      x.key === d.key
+                                        ? {
+                                            ...x,
+                                            last_mileage_at: e.target.value,
+                                          }
+                                        : x,
+                                    ),
+                                  )
+                                }
+                                type="number"
+                                className="h-8 w-full min-w-0 px-2 text-xs"
+                              />
+                            </TableCell>
+                            <TableCell className="p-1 align-top">
+                              <Textarea
+                                value={d.notes}
+                                onChange={(e) =>
+                                  setScheduleDrafts((prev) =>
+                                    prev.map((x) =>
+                                      x.key === d.key
+                                        ? { ...x, notes: e.target.value }
+                                        : x,
+                                    ),
+                                  )
+                                }
+                                rows={2}
+                                className="min-h-0 resize-y text-xs"
+                              />
+                            </TableCell>
+                            <TableCell className="p-1 align-top">
+                              <Button
+                                type="button"
+                                size="icon"
+                                variant="ghost"
+                                className="text-muted-foreground hover:text-destructive size-8"
+                                aria-label="Remove row"
+                                onClick={() =>
+                                  setScheduleDrafts((prev) =>
+                                    prev.filter((x) => x.key !== d.key),
+                                  )
+                                }
+                              >
+                                <Trash2 className="size-4" />
+                              </Button>
+                            </TableCell>
+                          </TableRow>
+                        ))}
+                      </TableBody>
+                    </Table>
+                  </div>
+                </div>
+              </div>
+            )}
+          </div>
+
+          <DialogFooter className="mt-2 flex-shrink-0 flex-col gap-2 border-t border-border/50 pt-3 sm:flex-row sm:justify-end">
+            {scheduleImportStep === "review" ? (
+              <Button
+                type="button"
+                variant="outline"
+                className="sm:mr-auto"
+                onClick={() => {
+                  setScheduleImportStep("pick");
+                  setScheduleDrafts([]);
+                  setScheduleParseError(null);
+                }}
+              >
+                Scan another
+              </Button>
+            ) : null}
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => setScheduleImportOpen(false)}
+            >
+              Cancel
+            </Button>
+            {scheduleImportStep === "review" ? (
+              <Button
+                type="button"
+                disabled={
+                  scheduleBulkSaving ||
+                  scheduleDrafts.filter((x) => x.task.trim()).length === 0
+                }
+                onClick={() => void bulkAddParsedSchedules()}
+              >
+                {scheduleBulkSaving ? (
+                  <Loader2 className="size-4 animate-spin" />
+                ) : (
+                  `Add all (${scheduleDrafts.filter((x) => x.task.trim()).length})`
+                )}
+              </Button>
+            ) : null}
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog
+        open={recommendOpen}
+        onOpenChange={(open) => {
+          setRecommendOpen(open);
+          if (!open) {
+            setRecommendError(null);
+            setRecommendResult(null);
+          }
+        }}
+      >
+        <DialogContent className="sm:max-w-lg">
+          <DialogHeader>
+            <DialogTitle>Suggested next service</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-3 py-1">
+            {recommendLoading ? (
+              <div className="text-muted-foreground flex items-center gap-2 text-sm">
+                <Loader2 className="size-4 animate-spin" />
+                Analyzing your schedule and service history…
+              </div>
+            ) : null}
+            {recommendError ? (
+              <p className="text-destructive text-sm">{recommendError}</p>
+            ) : null}
+            {recommendResult && !recommendLoading ? (
+              <div className="space-y-3">
+                <div className="flex flex-wrap items-center gap-2">
+                  <Badge
+                    variant={
+                      recommendResult.urgency === "due_now"
+                        ? "destructive"
+                        : recommendResult.urgency === "soon"
+                          ? "secondary"
+                          : "outline"
+                    }
+                  >
+                    {recommendResult.urgency === "due_now"
+                      ? "Due now"
+                      : recommendResult.urgency === "soon"
+                        ? "Soon"
+                        : "Routine"}
+                  </Badge>
+                  {recommendResult.estimatedMilesRemaining != null &&
+                  Number.isFinite(recommendResult.estimatedMilesRemaining) ? (
+                    <span className="text-muted-foreground text-xs">
+                      ~{Math.round(recommendResult.estimatedMilesRemaining).toLocaleString()}{" "}
+                      mi to ideal window
+                    </span>
+                  ) : null}
+                </div>
+                <div>
+                  <p className="text-base font-semibold tracking-tight">
+                    {recommendResult.headline}
+                  </p>
+                  <p className="text-muted-foreground mt-1 text-sm">
+                    {recommendResult.primaryService}
+                  </p>
+                </div>
+                <p className="text-foreground/90 text-sm leading-relaxed whitespace-pre-wrap">
+                  {recommendResult.rationale}
+                </p>
+                {recommendResult.relatedScheduleTask?.trim() ? (
+                  <p className="text-muted-foreground text-xs">
+                    Matches schedule:{" "}
+                    <span className="text-foreground font-medium">
+                      {recommendResult.relatedScheduleTask.trim()}
+                    </span>
+                  </p>
+                ) : null}
+                {recommendResult.caveats?.trim() ? (
+                  <p className="text-muted-foreground border-border/50 border-t pt-2 text-xs leading-relaxed">
+                    {recommendResult.caveats.trim()}
+                  </p>
+                ) : null}
+                <p className="text-muted-foreground text-[0.7rem] leading-relaxed">
+                  AI suggestion only — confirm with your manual, warranty, and a
+                  qualified technician.
+                </p>
+              </div>
+            ) : null}
+          </div>
+          <DialogFooter className="gap-2 sm:gap-2">
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => setRecommendOpen(false)}
+            >
+              Close
+            </Button>
+            {recommendResult && !recommendLoading ? (
+              <Button
+                type="button"
+                className="ai-gradient border-0 text-white"
+                disabled={recommendSaveLoading || !tab}
+                onClick={() => void saveRecommendationToList()}
+              >
+                {recommendSaveLoading ? (
+                  <Loader2 className="size-4 animate-spin" />
+                ) : (
+                  "Save to list"
+                )}
+              </Button>
+            ) : null}
           </DialogFooter>
         </DialogContent>
       </Dialog>

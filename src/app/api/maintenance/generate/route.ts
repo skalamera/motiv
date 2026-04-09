@@ -1,9 +1,22 @@
 import { generateObject } from "ai";
 import { z } from "zod";
 import { createClient } from "@/lib/supabase/server";
+import { currentDateForPrompt } from "@/lib/ai/current-date-for-prompt";
 import { getMotivModel } from "@/lib/ai/model";
-import { fetchPrimaryManualPdf } from "@/lib/ai/manual-fetch";
+import {
+  fetchMaintenanceManualPdfsForCar,
+  fetchPrimaryManualPdf,
+} from "@/lib/ai/manual-fetch";
 import type { Car } from "@/types/database";
+
+/** DB columns are integer; model may return decimals (e.g. 0.5) — coerce before insert. */
+function intervalToDbInt(
+  n: number | null | undefined,
+): number | null {
+  if (n == null || typeof n !== "number" || !Number.isFinite(n)) return null;
+  const r = Math.round(n);
+  return r > 0 ? r : null;
+}
 
 const scheduleSchema = z.object({
   items: z.array(
@@ -45,10 +58,14 @@ export async function POST(req: Request) {
   }
 
   const c = car as Car;
-  const manualPdf =
+  const ownerPdf =
     process.env.SUPABASE_SERVICE_ROLE_KEY && carId
       ? await fetchPrimaryManualPdf(carId)
       : null;
+  const maintenancePdfs =
+    process.env.SUPABASE_SERVICE_ROLE_KEY && carId
+      ? await fetchMaintenanceManualPdfsForCar(carId)
+      : [];
 
   const content: Array<
     | { type: "text"; text: string }
@@ -56,19 +73,31 @@ export async function POST(req: Request) {
   > = [
     {
       type: "text",
-      text: `Extract the manufacturer-recommended maintenance schedule for a ${c.year} ${c.make} ${c.model}${c.trim ? ` ${c.trim}` : ""}.
+      text: `${currentDateForPrompt()}
+
+Extract the manufacturer-recommended maintenance schedule for a ${c.year} ${c.make} ${c.model}${c.trim ? ` ${c.trim}` : ""}.
 
 Return items like oil change, tire rotation, brake fluid, coolant, filters, spark plugs, belts, inspections, etc.
-Use interval_miles and/or interval_months when specified. If the manual is attached, set source to "manual" and follow it. Otherwise set source to "web" and infer typical factory intervals (state uncertainty in notes).
+Use interval_miles and/or interval_months when specified. Each must be a **positive whole number** (integer miles or whole months only — never decimals like 0.5); use null if you cannot state a whole-number interval.
+If an owner’s manual PDF is attached, use it for general factory guidance and set source to "manual" when intervals come from it.
+If maintenance / service manual PDFs are also attached, **prefer them over the owner’s manual** for interval and service-item specifics when they differ; still set source to "manual" when grounded in any attached PDF (note which doc in the item notes if helpful).
+If no PDF supports an item, set source to "web" and infer typical factory intervals (state uncertainty in notes).
 
 If you cannot find data, return best-effort generic intervals with source "web" and clear notes.`,
     },
   ];
 
-  if (manualPdf) {
+  if (ownerPdf) {
     content.push({
       type: "file",
-      data: manualPdf.buffer,
+      data: ownerPdf.buffer,
+      mediaType: "application/pdf",
+    });
+  }
+  for (const p of maintenancePdfs) {
+    content.push({
+      type: "file",
+      data: p.buffer,
       mediaType: "application/pdf",
     });
   }
@@ -83,8 +112,8 @@ If you cannot find data, return best-effort generic intervals with source "web" 
     const rows = object.items.map((item) => ({
       car_id: carId,
       task: item.task,
-      interval_miles: item.interval_miles ?? null,
-      interval_months: item.interval_months ?? null,
+      interval_miles: intervalToDbInt(item.interval_miles),
+      interval_months: intervalToDbInt(item.interval_months),
       notes: item.notes ?? null,
       is_custom: false,
       source: item.source,

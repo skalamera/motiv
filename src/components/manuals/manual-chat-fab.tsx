@@ -7,8 +7,10 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { MessageCircle, Send, Loader2, X, Bot } from "lucide-react";
+import { ChatSourcesPanel } from "@/components/chat/chat-sources-panel";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
+import { useChatSourcePreferences } from "@/hooks/use-chat-source-preferences";
 import {
   Sheet,
   SheetContent,
@@ -58,6 +60,9 @@ export function ManualChatFab({
     [carId, manualId],
   );
 
+  const { sourcePrefs, setSourcePrefs, sourcePrefsRef, docMeta } =
+    useChatSourcePreferences(carId);
+
   const transport = useMemo(
     () =>
       new DefaultChatTransport({
@@ -65,6 +70,7 @@ export function ManualChatFab({
         body: () => ({
           carId: carIdRef.current,
           manualId: manualIdRef.current,
+          sourcePreferences: sourcePrefsRef.current,
         }),
       }),
     [],
@@ -249,6 +255,15 @@ export function ManualChatFab({
             onSubmit={(e) => void onSubmit(e)}
             className="border-border/50 mt-auto border-t p-3"
           >
+            <div className="relative mb-2">
+              <ChatSourcesPanel
+                carId={carId}
+                sourcePrefs={sourcePrefs}
+                setSourcePrefs={setSourcePrefs}
+                docMeta={docMeta}
+                panelSide="top"
+              />
+            </div>
             <Textarea
               value={input}
               onChange={(e) => setInput(e.target.value)}

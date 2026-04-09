@@ -16,7 +16,9 @@ import {
   Coins,
 } from "lucide-react";
 import { CarSelector } from "@/components/car-selector";
+import { ChatSourcesPanel } from "@/components/chat/chat-sources-panel";
 import { Button } from "@/components/ui/button";
+import { useChatSourcePreferences } from "@/hooks/use-chat-source-preferences";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Textarea } from "@/components/ui/textarea";
 import { cn } from "@/lib/utils";
@@ -56,6 +58,8 @@ export function UpgradesView() {
   const [input, setInput] = useState("");
   const carIdRef = useRef(carId);
   carIdRef.current = carId;
+  const { sourcePrefs, setSourcePrefs, sourcePrefsRef, docMeta } =
+    useChatSourcePreferences(carId);
   const hydrationRef = useRef(false);
   const persistenceKey = useMemo(() => storageKeyForCar(carId), [carId]);
   const chatId = useMemo(() => `upgrades:${carId ?? "any"}`, [carId]);
@@ -67,6 +71,7 @@ export function UpgradesView() {
         body: () => ({
           carId: carIdRef.current ?? undefined,
           mode: "upgrades",
+          sourcePreferences: sourcePrefsRef.current,
         }),
       }),
     [],
@@ -299,6 +304,15 @@ export function UpgradesView() {
             onSubmit={(e) => void onSubmit(e)}
             className="flex flex-col gap-2 rounded-xl border border-border/50 bg-card/40 p-3"
           >
+            <div className="relative">
+              <ChatSourcesPanel
+                carId={carId}
+                sourcePrefs={sourcePrefs}
+                setSourcePrefs={setSourcePrefs}
+                docMeta={docMeta}
+                panelSide="bottom"
+              />
+            </div>
             <Textarea
               value={input}
               onChange={(e) => setInput(e.target.value)}

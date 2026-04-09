@@ -22,9 +22,11 @@ import {
   Film,
 } from "lucide-react";
 import { CarSelector } from "@/components/car-selector";
+import { ChatSourcesPanel } from "@/components/chat/chat-sources-panel";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { ScrollArea } from "@/components/ui/scroll-area";
+import { useChatSourcePreferences } from "@/hooks/use-chat-source-preferences";
 import { cn } from "@/lib/utils";
 
 function textFromMessage(m: UIMessage): string {
@@ -139,6 +141,9 @@ export function ChatInterface({ initialCarId, initialQuery }: { initialCarId: st
     setCarId(initialCarId);
   }, [initialCarId]);
 
+  const { sourcePrefs, setSourcePrefs, sourcePrefsRef, docMeta } =
+    useChatSourcePreferences(carId);
+
   const persistenceKey = useMemo(() => storageKeyForCar(carId), [carId]);
   const chatId = useMemo(() => `chat:${carId ?? "any"}`, [carId]);
 
@@ -148,15 +153,17 @@ export function ChatInterface({ initialCarId, initialQuery }: { initialCarId: st
         api: "/api/chat",
         body: () => ({
           carId: carIdRef.current ?? undefined,
+          sourcePreferences: sourcePrefsRef.current,
         }),
       }),
     [],
   );
 
-  const { messages, sendMessage, status, stop, setMessages } = useChat({
-    id: chatId,
-    transport,
-  });
+  const { messages, sendMessage, status, stop, setMessages, error, clearError } =
+    useChat({
+      id: chatId,
+      transport,
+    });
 
   const busy = status === "streaming" || status === "submitted";
 
@@ -256,12 +263,41 @@ export function ChatInterface({ initialCarId, initialQuery }: { initialCarId: st
       <div className="flex flex-col gap-2">
         <CarSelector value={carId} onChange={setCarId} />
         <p className="text-muted-foreground text-xs">
-          Motiv uses your owner&apos;s manual (when uploaded) and the web
+          Choose a vehicle, then use <strong className="text-foreground/80">Sources</strong>{" "}
+          below to include web, manuals, other docs, and workshop manual—when they&apos;re on
+          file.
         </p>
       </div>
 
       <ScrollArea className="min-h-0 flex-1 rounded-2xl border border-border/50 bg-card/30 p-4 backdrop-blur-sm">
         <div className="space-y-5 pr-3">
+          {error ? (
+            <div
+              role="alert"
+              className="border-destructive/40 bg-destructive/10 text-destructive flex flex-col gap-2 rounded-xl border px-3 py-2.5 text-sm"
+            >
+              <div className="flex items-start justify-between gap-2">
+                <p className="min-w-0 flex-1 leading-snug">
+                  <span className="font-medium">Couldn&apos;t get a reply.</span>{" "}
+                  {error.message}
+                </p>
+                <button
+                  type="button"
+                  onClick={() => clearError()}
+                  className="text-destructive/80 hover:text-destructive shrink-0 rounded-md px-1.5 py-0.5 text-xs underline"
+                >
+                  Dismiss
+                </button>
+              </div>
+              <p className="text-destructive/85 text-xs leading-relaxed">
+                If this keeps happening, check the Vercel deployment logs for{" "}
+                <code className="rounded bg-black/10 px-1 py-px font-mono text-[0.65rem]">
+                  /api/chat
+                </code>
+                . Large PDF manuals or AI Gateway limits can also cut the stream short.
+              </p>
+            </div>
+          ) : null}
           {messages.length === 0 ? (
             <div className="flex h-full flex-col items-center justify-center gap-6 py-16">
               <div className="ai-gradient flex size-14 items-center justify-center rounded-2xl text-white shadow-lg">
@@ -417,6 +453,13 @@ export function ChatInterface({ initialCarId, initialQuery }: { initialCarId: st
             accept="image/*,video/*,application/pdf"
             multiple
             onChange={onFileInputChange}
+          />
+          <ChatSourcesPanel
+            carId={carId}
+            sourcePrefs={sourcePrefs}
+            setSourcePrefs={setSourcePrefs}
+            docMeta={docMeta}
+            panelSide="top"
           />
           <Button
             type="button"

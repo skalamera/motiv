@@ -116,13 +116,13 @@ export function LocalDrivesView() {
               Add your location first
             </CardTitle>
             <CardDescription>
-              We use the address from Settings to anchor suggestions in the right
+              We use the address from Profile to anchor suggestions in the right
               region.
             </CardDescription>
           </CardHeader>
           <CardContent>
-            <Link href="/settings" className={buttonVariants()}>
-              Open Settings
+            <Link href="/profile" className={buttonVariants()}>
+              Open Profile
             </Link>
           </CardContent>
         </Card>
@@ -151,7 +151,7 @@ export function LocalDrivesView() {
                 )}
               </Button>
               <Link
-                href="/settings"
+                href="/profile"
                 className={buttonVariants({ variant: "outline" })}
               >
                 Edit address

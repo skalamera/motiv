@@ -1,0 +1,3 @@
+# Local / scratch assets — keep deploy uploads under Vercel body limits (~10MB CLI)
+images_to_pdf
+Car_Libraries

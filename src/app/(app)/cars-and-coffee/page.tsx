@@ -68,10 +68,10 @@ export default async function CarsAndCoffeePage() {
         <div className="text-center max-w-md space-y-4">
           <h2 className="text-2xl font-bold tracking-tight">Location Required</h2>
           <p className="text-muted-foreground">
-            We need to know your state to show local Cars and Coffee events. Please update your home address or state in Settings.
+            We need to know your state to show local Cars and Coffee events. Please update your home address or state in Profile.
           </p>
-          <Link href="/settings" className={buttonVariants()}>
-            Go to Settings
+          <Link href="/profile" className={buttonVariants()}>
+            Go to Profile
           </Link>
         </div>
       </div>

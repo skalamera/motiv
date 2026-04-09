@@ -195,11 +195,11 @@ export function SuggestedLocalDrive() {
             Local scenic drives
           </CardTitle>
           <CardDescription>
-            Add your address in Settings to see map-ready route ideas near you.
+            Add your address in Profile to see map-ready route ideas near you.
           </CardDescription>
         </CardHeader>
         <CardContent className="flex flex-wrap gap-2">
-          <Link href="/settings" className={buttonVariants({ size: "sm" })}>
+          <Link href="/profile" className={buttonVariants({ size: "sm" })}>
             Add location
           </Link>
           <Link

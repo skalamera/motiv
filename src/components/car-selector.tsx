@@ -97,7 +97,22 @@ export function CarSelector({
             {(v) => {
               if (v == null || v === "") return "Any / not specified";
               const c = cars.find((car) => car.id === v);
-              return c ? carDisplayName(c) : "Any / not specified";
+              if (!c) return "Any / not specified";
+              return (
+                <span className="flex min-w-0 items-center gap-2 text-left">
+                  {c.image_url ? (
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img
+                      src={c.image_url}
+                      alt=""
+                      className="size-7 shrink-0 rounded-md object-cover ring-1 ring-border/60"
+                    />
+                  ) : (
+                    <span className="bg-muted/80 size-7 shrink-0 rounded-md ring-1 ring-border/40" />
+                  )}
+                  <span className="truncate">{carDisplayName(c)}</span>
+                </span>
+              );
             }}
           </SelectValue>
         </SelectTrigger>
@@ -110,7 +125,19 @@ export function CarSelector({
               label={carDisplayName(c)}
               className="items-start py-2.5"
             >
-              <span className="whitespace-normal">{carDisplayName(c)}</span>
+              <span className="flex items-center gap-2">
+                {c.image_url ? (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img
+                    src={c.image_url}
+                    alt=""
+                    className="size-8 shrink-0 rounded-md object-cover"
+                  />
+                ) : (
+                  <span className="bg-muted size-8 shrink-0 rounded-md" />
+                )}
+                <span className="whitespace-normal">{carDisplayName(c)}</span>
+              </span>
             </SelectItem>
           ))}
         </SelectContent>
