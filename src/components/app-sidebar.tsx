@@ -8,6 +8,7 @@ import {
   MessageSquare,
   Wrench,
   Gauge,
+  Flame,
   AlertTriangle,
   Newspaper,
   Rss,
@@ -18,6 +19,7 @@ import {
   PanelLeftClose,
   PanelLeft,
   ChevronDown,
+  Building2,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
@@ -29,12 +31,14 @@ const nav = [
   { href: "/", label: "Dashboard", icon: LayoutDashboard },
   { href: "/chat", label: "Ask Motiv", icon: MessageSquare },
   { href: "/maintenance", label: "Maintenance", icon: Wrench },
-  { href: "/upgrades", label: "Upgrades", icon: Gauge },
+  { href: "/upgrades", label: "Upgrade Advisor", icon: Gauge },
+  { href: "/west-coast-customs", label: "Customize", icon: Flame },
   { href: "/manuals", label: "Library", icon: Library },
   { href: "/recalls", label: "Recalls", icon: AlertTriangle },
   { href: "/news", label: "News", icon: Newspaper },
   { href: "/videos", label: "Videos", icon: Video },
   { href: "/local-drives", label: "Local Drives", icon: MapPin },
+  { href: "/local-shops", label: "Local Shops", icon: Building2 },
 ];
 
 type AppSidebarProps = {

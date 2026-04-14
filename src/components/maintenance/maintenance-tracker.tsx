@@ -2,11 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
-import type {
-  Car,
-  MaintenanceSchedule,
-  MaintenanceSuggestion,
-} from "@/types/database";
+import type { Car, MaintenanceSchedule } from "@/types/database";
 import {
   Select,
   SelectContent,
@@ -36,7 +32,6 @@ import {
 } from "@/components/ui/table";
 import {
   Camera,
-  Check,
   Loader2,
   Plus,
   ScanLine,
@@ -56,16 +51,6 @@ type ServiceLogRow = {
   taskLabel: string;
   title: string | null;
   schedule_id: string | null;
-};
-
-type NextServiceRecommendation = {
-  headline: string;
-  primaryService: string;
-  rationale: string;
-  urgency: "routine" | "soon" | "due_now";
-  estimatedMilesRemaining: number | null;
-  relatedScheduleTask: string | null;
-  caveats: string | null;
 };
 
 function formatShortDate(iso: string | null): string {
@@ -603,9 +588,6 @@ export function MaintenanceTracker({ initialCarId }: { initialCarId: string | nu
     {},
   );
   const [logsByCar, setLogsByCar] = useState<Record<string, ServiceLogRow[]>>({});
-  const [suggestionsByCar, setSuggestionsByCar] = useState<
-    Record<string, MaintenanceSuggestion[]>
-  >({});
   const [tab, setTab] = useCarSelection("");
   const [scheduleSourceFilter, setScheduleSourceFilter] =
     useState<ScheduleSourceFilter>("user_provided");
@@ -628,13 +610,6 @@ export function MaintenanceTracker({ initialCarId }: { initialCarId: string | nu
   const [receiptError, setReceiptError] = useState<string | null>(null);
   const uploadInputRef = useRef<HTMLInputElement>(null);
   const cameraInputRef = useRef<HTMLInputElement>(null);
-
-  const [recommendOpen, setRecommendOpen] = useState(false);
-  const [recommendLoading, setRecommendLoading] = useState(false);
-  const [recommendError, setRecommendError] = useState<string | null>(null);
-  const [recommendResult, setRecommendResult] =
-    useState<NextServiceRecommendation | null>(null);
-  const [recommendSaveLoading, setRecommendSaveLoading] = useState(false);
 
   type ParsedScheduleDraft = {
     key: string;
@@ -972,7 +947,6 @@ export function MaintenanceTracker({ initialCarId }: { initialCarId: string | nu
     setCars(list);
     const map: Record<string, MaintenanceSchedule[]> = {};
     const logsMap: Record<string, ServiceLogRow[]> = {};
-    const suggestionsMap: Record<string, MaintenanceSuggestion[]> = {};
     for (const car of list) {
       const { data: sch } = await supabase
         .from("maintenance_schedules")
@@ -1025,19 +999,9 @@ export function MaintenanceTracker({ initialCarId }: { initialCarId: string | nu
           schedule_id: row.schedule_id,
         };
       });
-
-      const { data: sugRows, error: sugErr } = await supabase
-        .from("maintenance_suggestions")
-        .select("*")
-        .eq("car_id", car.id)
-        .order("created_at", { ascending: false });
-      suggestionsMap[car.id] = sugErr
-        ? []
-        : ((sugRows ?? []) as MaintenanceSuggestion[]);
     }
     setSchedules(map);
     setLogsByCar(logsMap);
-    setSuggestionsByCar(suggestionsMap);
     setLoading(false);
   }, []);
 
@@ -1058,38 +1022,6 @@ export function MaintenanceTracker({ initialCarId }: { initialCarId: string | nu
       setTab(first);
     }
   }, [cars, tab, initialCarId, setTab]);
-
-  async function runRecommendNext() {
-    if (!tab) return;
-    setRecommendOpen(true);
-    setRecommendError(null);
-    setRecommendResult(null);
-    setRecommendLoading(true);
-    try {
-      const res = await fetch("/api/maintenance/recommend-next", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ carId: tab }),
-      });
-      const json = (await res.json()) as {
-        error?: string;
-        recommendation?: NextServiceRecommendation;
-      };
-      if (!res.ok) {
-        throw new Error(json.error ?? res.statusText);
-      }
-      if (!json.recommendation) {
-        throw new Error("No recommendation returned");
-      }
-      setRecommendResult(json.recommendation);
-    } catch (e) {
-      setRecommendError(
-        e instanceof Error ? e.message : "Could not get recommendation",
-      );
-    } finally {
-      setRecommendLoading(false);
-    }
-  }
 
   async function runGenerate() {
     if (!tab) return;
@@ -1148,87 +1080,6 @@ export function MaintenanceTracker({ initialCarId }: { initialCarId: string | nu
     await load();
   }
 
-  async function saveRecommendationToList() {
-    if (!tab || !recommendResult) return;
-    setRecommendSaveLoading(true);
-    const supabase = createClient();
-    const r = recommendResult;
-    const { error } = await supabase.from("maintenance_suggestions").insert({
-      car_id: tab,
-      headline: r.headline.trim(),
-      primary_service: r.primaryService.trim(),
-      rationale: r.rationale?.trim() || null,
-      urgency: r.urgency,
-      estimated_miles_remaining:
-        r.estimatedMilesRemaining != null &&
-        Number.isFinite(r.estimatedMilesRemaining)
-          ? Math.round(r.estimatedMilesRemaining)
-          : null,
-      related_schedule_task: r.relatedScheduleTask?.trim() || null,
-      caveats: r.caveats?.trim() || null,
-    });
-    setRecommendSaveLoading(false);
-    if (error) {
-      alert(error.message);
-      return;
-    }
-    setRecommendOpen(false);
-    setRecommendResult(null);
-    await load();
-  }
-
-  async function completeSuggestion(s: MaintenanceSuggestion, car: Car) {
-    const supabase = createClient();
-    const rows = schedules[car.id] ?? [];
-    let scheduleId: string | null = null;
-    if (s.related_schedule_task?.trim()) {
-      const needle = s.related_schedule_task.trim().toLowerCase();
-      const match = rows.find((r) => r.task.trim().toLowerCase() === needle);
-      if (match) scheduleId = match.id;
-    }
-    const noteParts = [
-      s.headline.trim(),
-      s.rationale?.trim(),
-      s.caveats?.trim(),
-    ].filter(Boolean);
-    const notes =
-      noteParts.length > 0
-        ? `${noteParts.join("\n\n")}\n\n(Completed from saved Motiv suggestion.)`
-        : "(Completed from saved Motiv suggestion.)";
-
-    const { error: logErr } = await supabase.from("maintenance_logs").insert({
-      schedule_id: scheduleId,
-      car_id: car.id,
-      title: s.primary_service.trim(),
-      completed_at: new Date().toISOString(),
-      mileage_at: car.mileage,
-      notes,
-      cost: null,
-    });
-    if (logErr) {
-      alert(logErr.message);
-      return;
-    }
-    if (scheduleId) {
-      await supabase
-        .from("maintenance_schedules")
-        .update({
-          last_completed_at: new Date().toISOString(),
-          last_mileage_at: car.mileage,
-        })
-        .eq("id", scheduleId);
-    }
-    await supabase.from("maintenance_suggestions").delete().eq("id", s.id);
-    await load();
-  }
-
-  async function deleteSuggestion(id: string) {
-    if (!confirm("Remove this saved suggestion?")) return;
-    const supabase = createClient();
-    await supabase.from("maintenance_suggestions").delete().eq("id", id);
-    await load();
-  }
-
   const suggestedNext = useMemo(() => {
     const act = cars.find((c) => c.id === tab) ?? cars[0];
     if (!act) {
@@ -1272,7 +1123,6 @@ export function MaintenanceTracker({ initialCarId }: { initialCarId: string | nu
     scheduleRowMatchesSourceFilter(r, scheduleSourceFilter),
   );
   const historyRows = logsByCar[active.id] ?? [];
-  const suggestionRows = suggestionsByCar[active.id] ?? [];
 
   return (
     <div className="space-y-4">
@@ -1510,109 +1360,6 @@ export function MaintenanceTracker({ initialCarId }: { initialCarId: string | nu
         </div>
 
         <div className="rounded-xl border border-border/50 bg-card/50 backdrop-blur-sm">
-          <div className="border-border/50 border-b px-4 py-3">
-            <h3 className="text-sm font-semibold tracking-tight">
-              Saved AI suggestions
-            </h3>
-            <p className="text-muted-foreground mt-0.5 max-w-xl text-xs">
-              These entries come from{" "}
-              <strong className="text-foreground font-medium">
-                Suggest next service
-              </strong>{" "}
-              (AI-assisted) and are separate from the factual suggestion above. Save
-              a recommendation to keep it here, mark complete to add it to service
-              history, or delete if you change your mind.
-            </p>
-          </div>
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Saved</TableHead>
-                <TableHead>Summary</TableHead>
-                <TableHead>Urgency</TableHead>
-                <TableHead className="text-right">Actions</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {suggestionRows.length === 0 ? (
-                <TableRow>
-                  <TableCell
-                    colSpan={4}
-                    className="text-muted-foreground py-8 text-center text-sm"
-                  >
-                    No saved suggestions. Run{" "}
-                    <span className="text-foreground font-medium">
-                      Suggest next service
-                    </span>{" "}
-                    and choose{" "}
-                    <span className="text-foreground font-medium">
-                      Save to list
-                    </span>
-                    .
-                  </TableCell>
-                </TableRow>
-              ) : (
-                suggestionRows.map((s) => (
-                  <TableRow key={s.id}>
-                    <TableCell className="whitespace-nowrap text-sm">
-                      {formatShortDate(s.created_at)}
-                    </TableCell>
-                    <TableCell>
-                      <p className="font-medium text-sm">{s.headline}</p>
-                      <p className="text-muted-foreground mt-0.5 text-xs">
-                        {s.primary_service}
-                      </p>
-                    </TableCell>
-                    <TableCell>
-                      <Badge
-                        variant={
-                          s.urgency === "due_now"
-                            ? "destructive"
-                            : s.urgency === "soon"
-                              ? "secondary"
-                              : "outline"
-                        }
-                        className="text-[10px] capitalize"
-                      >
-                        {s.urgency === "due_now"
-                          ? "Due now"
-                          : s.urgency === "soon"
-                            ? "Soon"
-                            : "Routine"}
-                      </Badge>
-                    </TableCell>
-                    <TableCell className="text-right">
-                      <div className="flex justify-end gap-1">
-                        <Button
-                          size="sm"
-                          variant="default"
-                          type="button"
-                          className="h-7 text-xs"
-                          onClick={() => void completeSuggestion(s, active)}
-                        >
-                          <Check className="mr-1 size-3.5" />
-                          Complete
-                        </Button>
-                        <Button
-                          size="icon"
-                          variant="ghost"
-                          type="button"
-                          className="text-muted-foreground hover:text-destructive size-7"
-                          onClick={() => void deleteSuggestion(s.id)}
-                          aria-label="Delete suggestion"
-                        >
-                          <Trash2 className="size-4" />
-                        </Button>
-                      </div>
-                    </TableCell>
-                  </TableRow>
-                ))
-              )}
-            </TableBody>
-          </Table>
-        </div>
-
-        <div className="rounded-xl border border-border/50 bg-card/50 backdrop-blur-sm">
           <div className="border-border/50 flex flex-col gap-3 border-b px-4 py-3 sm:flex-row sm:items-start sm:justify-between">
             <div>
               <h3 className="text-sm font-semibold tracking-tight">
@@ -1627,19 +1374,6 @@ export function MaintenanceTracker({ initialCarId }: { initialCarId: string | nu
               </p>
             </div>
             <div className="flex shrink-0 flex-wrap justify-end gap-2">
-              <Button
-                type="button"
-                disabled={recommendLoading}
-                onClick={() => void runRecommendNext()}
-                className="shrink-0 ai-gradient glow-primary rounded-xl border-0 text-white shadow-md hover:opacity-90 disabled:opacity-50"
-              >
-                {recommendLoading ? (
-                  <Loader2 className="mr-2 size-4 animate-spin" />
-                ) : (
-                  <Sparkles className="mr-2 size-4" />
-                )}
-                Suggest next service
-              </Button>
               <Button
                 type="button"
                 variant="secondary"
@@ -2124,113 +1858,6 @@ export function MaintenanceTracker({ initialCarId }: { initialCarId: string | nu
                   <Loader2 className="size-4 animate-spin" />
                 ) : (
                   `Add all (${scheduleDrafts.filter((x) => x.task.trim()).length})`
-                )}
-              </Button>
-            ) : null}
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-
-      <Dialog
-        open={recommendOpen}
-        onOpenChange={(open) => {
-          setRecommendOpen(open);
-          if (!open) {
-            setRecommendError(null);
-            setRecommendResult(null);
-          }
-        }}
-      >
-        <DialogContent className="sm:max-w-lg">
-          <DialogHeader>
-            <DialogTitle>Suggested next service</DialogTitle>
-          </DialogHeader>
-          <div className="space-y-3 py-1">
-            {recommendLoading ? (
-              <div className="text-muted-foreground flex items-center gap-2 text-sm">
-                <Loader2 className="size-4 animate-spin" />
-                Analyzing your schedule and service history…
-              </div>
-            ) : null}
-            {recommendError ? (
-              <p className="text-destructive text-sm">{recommendError}</p>
-            ) : null}
-            {recommendResult && !recommendLoading ? (
-              <div className="space-y-3">
-                <div className="flex flex-wrap items-center gap-2">
-                  <Badge
-                    variant={
-                      recommendResult.urgency === "due_now"
-                        ? "destructive"
-                        : recommendResult.urgency === "soon"
-                          ? "secondary"
-                          : "outline"
-                    }
-                  >
-                    {recommendResult.urgency === "due_now"
-                      ? "Due now"
-                      : recommendResult.urgency === "soon"
-                        ? "Soon"
-                        : "Routine"}
-                  </Badge>
-                  {recommendResult.estimatedMilesRemaining != null &&
-                  Number.isFinite(recommendResult.estimatedMilesRemaining) ? (
-                    <span className="text-muted-foreground text-xs">
-                      ~{Math.round(recommendResult.estimatedMilesRemaining).toLocaleString()}{" "}
-                      mi to ideal window
-                    </span>
-                  ) : null}
-                </div>
-                <div>
-                  <p className="text-base font-semibold tracking-tight">
-                    {recommendResult.headline}
-                  </p>
-                  <p className="text-muted-foreground mt-1 text-sm">
-                    {recommendResult.primaryService}
-                  </p>
-                </div>
-                <p className="text-foreground/90 text-sm leading-relaxed whitespace-pre-wrap">
-                  {recommendResult.rationale}
-                </p>
-                {recommendResult.relatedScheduleTask?.trim() ? (
-                  <p className="text-muted-foreground text-xs">
-                    Matches schedule:{" "}
-                    <span className="text-foreground font-medium">
-                      {recommendResult.relatedScheduleTask.trim()}
-                    </span>
-                  </p>
-                ) : null}
-                {recommendResult.caveats?.trim() ? (
-                  <p className="text-muted-foreground border-border/50 border-t pt-2 text-xs leading-relaxed">
-                    {recommendResult.caveats.trim()}
-                  </p>
-                ) : null}
-                <p className="text-muted-foreground text-[0.7rem] leading-relaxed">
-                  AI suggestion only — confirm with your manual, warranty, and a
-                  qualified technician.
-                </p>
-              </div>
-            ) : null}
-          </div>
-          <DialogFooter className="gap-2 sm:gap-2">
-            <Button
-              type="button"
-              variant="outline"
-              onClick={() => setRecommendOpen(false)}
-            >
-              Close
-            </Button>
-            {recommendResult && !recommendLoading ? (
-              <Button
-                type="button"
-                className="ai-gradient border-0 text-white"
-                disabled={recommendSaveLoading || !tab}
-                onClick={() => void saveRecommendationToList()}
-              >
-                {recommendSaveLoading ? (
-                  <Loader2 className="size-4 animate-spin" />
-                ) : (
-                  "Save to list"
                 )}
               </Button>
             ) : null}

@@ -11,6 +11,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Label } from "@/components/ui/label";
+import { cn } from "@/lib/utils";
 import { useCarSelection } from "@/hooks/use-car-selection";
 
 type Props = {
@@ -18,6 +19,8 @@ type Props = {
   onChange: (carId: string | null) => void;
   label?: string;
   className?: string;
+  /** Merged into SelectContent (e.g. `dark` when the menu is portaled outside a .dark subtree). */
+  selectContentClassName?: string;
 };
 
 export function carDisplayName(c: Car): string {
@@ -30,6 +33,7 @@ export function CarSelector({
   onChange,
   label = "Vehicle",
   className,
+  selectContentClassName,
 }: Props) {
   const [cars, setCars] = useState<Car[]>([]);
   const [loading, setLoading] = useState(true);
@@ -92,7 +96,7 @@ export function CarSelector({
         value={value ?? ""}
         onValueChange={(v) => handleChange(v === "" ? null : v)}
       >
-        <SelectTrigger className="bg-background/50 h-auto min-h-9 w-full min-w-[min(100%,22rem)] max-w-xl sm:min-w-[26rem]">
+        <SelectTrigger className="h-auto min-h-9 w-full min-w-[min(100%,22rem)] max-w-xl bg-background/50 text-foreground sm:min-w-[26rem]">
           <SelectValue placeholder="Any / not specified">
             {(v) => {
               if (v == null || v === "") return "Any / not specified";
@@ -116,7 +120,12 @@ export function CarSelector({
             }}
           </SelectValue>
         </SelectTrigger>
-        <SelectContent className="max-w-[min(100vw-1.5rem,40rem)]">
+        <SelectContent
+          className={cn(
+            "max-w-[min(100vw-1.5rem,40rem)]",
+            selectContentClassName,
+          )}
+        >
           <SelectItem value="">Any / not specified</SelectItem>
           {cars.map((c) => (
             <SelectItem

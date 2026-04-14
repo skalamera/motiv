@@ -277,5 +277,70 @@ html.light .motiv-auth-bg {
   @apply text-primary underline underline-offset-2;
 }
 
+/* ─── West Coast Customs theme ─── */
+.wcc-bg {
+  background:
+    radial-gradient(ellipse 100% 60% at 50% 0%, oklch(0.18 0.08 30 / 0.5), transparent 50%),
+    radial-gradient(ellipse 60% 40% at 80% 100%, oklch(0.2 0.12 270 / 0.3), transparent 50%),
+    oklch(0.06 0.015 270);
+}
+
+.wcc-accent {
+  background: linear-gradient(135deg, oklch(0.7 0.25 40), oklch(0.65 0.2 20));
+}
+
+.wcc-glow {
+  box-shadow:
+    0 0 20px -5px oklch(0.7 0.25 40 / 0.4),
+    0 0 40px -10px oklch(0.7 0.25 40 / 0.2);
+}
+
+.wcc-glow-cyan {
+  box-shadow:
+    0 0 15px -3px oklch(0.7 0.2 200 / 0.35),
+    0 0 30px -8px oklch(0.7 0.2 200 / 0.15);
+}
+
+/* NFS-style scanline overlay */
+.wcc-scanlines::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background: repeating-linear-gradient(
+    0deg,
+    transparent,
+    transparent 2px,
+    oklch(0 0 0 / 0.03) 2px,
+    oklch(0 0 0 / 0.03) 4px
+  );
+  z-index: 1;
+}
+
+/* Neon text glow */
+.wcc-neon-orange {
+  text-shadow: 0 0 7px oklch(0.7 0.25 40 / 0.6), 0 0 20px oklch(0.7 0.25 40 / 0.25);
+}
+.wcc-neon-cyan {
+  text-shadow: 0 0 7px oklch(0.7 0.2 200 / 0.6), 0 0 20px oklch(0.7 0.2 200 / 0.25);
+}
+
+/* HUD panel glass */
+.wcc-hud {
+  background: oklch(0.08 0.02 270 / 0.75);
+  backdrop-filter: blur(16px) saturate(1.4);
+  border: 1px solid oklch(0.7 0.25 40 / 0.15);
+}
+
+/* Horizontal scroll: hide scrollbar */
+.wcc-scroll-hide::-webkit-scrollbar { display: none; }
+.wcc-scroll-hide { -ms-overflow-style: none; scrollbar-width: none; }
+
+@keyframes wcc-pulse-border {
+  0%, 100% { border-color: oklch(0.7 0.25 40 / 0.2); }
+  50% { border-color: oklch(0.7 0.25 40 / 0.5); }
+}
+.wcc-pulse-border { animation: wcc-pulse-border 2s ease-in-out infinite; }
+
 /* ─── Smooth page transitions ─── */
 @view-transition { navigation: auto; }
